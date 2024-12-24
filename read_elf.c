@@ -5,6 +5,17 @@
 
 #include "read_elf.h"
 
+int compare(const void *a, const void *b) {
+  symbol_t arg1 = *(const symbol_t *)a;
+  symbol_t arg2 = *(const symbol_t *)b;
+
+  if (arg1.address < arg2.address)
+    return -1;
+  if (arg1.address > arg2.address)
+    return 1;
+  return 0;
+}
+
 int read_header(FILE *pfile, Elf64_Ehdr *hdr) {
   fseek(pfile, 0, SEEK_SET);
   if (fread(hdr, sizeof(*hdr), 1, pfile) != 1) {
@@ -25,32 +36,45 @@ int read_header(FILE *pfile, Elf64_Ehdr *hdr) {
   return 0;
 }
 
-void read_symbol_table(FILE *pfile, size_t idx_symtab, size_t idx_strtab,
-                       Elf64_Shdr section_header[]) {
+symbol_t *read_symbol_table(FILE *pfile, size_t idx_symtab, size_t idx_strtab,
+                            Elf64_Shdr *section_header, size_t *num_symbols) {
   Elf64_Shdr symtab = section_header[idx_symtab];
   Elf64_Shdr strtab = section_header[idx_strtab];
 
   Elf64_Sym *symbols = malloc(symtab.sh_size);
   fseek(pfile, symtab.sh_offset, SEEK_SET);
-  fread(symbols, symtab.sh_size, 1, pfile);
+  if (fread(symbols, symtab.sh_size, 1, pfile) != 1) {
+    fprintf(stderr, "Unable to read the symbol table\n");
+    free(symbols);
+    return NULL;
+  }
 
   // Read the string table
   char *strtab_data = malloc(strtab.sh_size);
   fseek(pfile, strtab.sh_offset, SEEK_SET);
-  fread(strtab_data, strtab.sh_size, 1, pfile);
+  if (fread(strtab_data, strtab.sh_size, 1, pfile) != 1) {
+    fprintf(stderr, "Unable to read the string table\n");
+    free(strtab_data);
+    return NULL;
+  }
 
-  int num_symbols = symtab.sh_size / symtab.sh_entsize;
-  for (int i = 0; i < num_symbols; i++) {
+  *num_symbols = symtab.sh_size / symtab.sh_entsize;
+
+  symbol_t *symbol_arr = malloc(sizeof(symbol_t) * *num_symbols);
+
+  for (size_t i = 0; i < *num_symbols; i++) {
     Elf64_Sym sym = symbols[i];
     const char *name = &strtab_data[sym.st_name]; // Symbol name
-
-    printf("Symbol %d:\n", i);
-    printf("  Name: %s\n", name);
-    printf("  Value: 0x%lx\n", sym.st_value);
-    printf("  Size: %lu\n", sym.st_size);
-    printf("  Info: 0x%x\n", sym.st_info);
-    printf("  Section Index: %d\n", sym.st_shndx);
+    size_t len = strlen(name);
+    symbol_arr[i].symbol_name = malloc(sizeof(char) * len);
+    memcpy((void *)symbol_arr[i].symbol_name, name, len);
+    symbol_arr[i].address = sym.st_value;
   }
+
+  free(symbols);
+  free(strtab_data);
+
+  return symbol_arr;
 }
 
 int read_section_header(FILE *pfile, Elf64_Ehdr *hdr, Elf64_Shdr *shdr) {
@@ -70,6 +94,7 @@ int get_symtab_strtab_idx(FILE *pfile, Elf64_Ehdr *hdr, Elf64_Shdr *shdr,
   if (fread(shstrtab, 1, shdr[hdr->e_shstrndx].sh_size, pfile) !=
       shdr[hdr->e_shstrndx].sh_size) {
     fprintf(stderr, "Unable to read the section header string table\n");
+    free(shstrtab);
     return 1;
   }
 
@@ -84,38 +109,43 @@ int get_symtab_strtab_idx(FILE *pfile, Elf64_Ehdr *hdr, Elf64_Shdr *shdr,
     }
   }
 
+  free(shstrtab);
+
   return 0;
 }
 
-symbol_t *get_elf_symbols(const char *file_name) {
+symbols_t get_elf_symbols(const char *file_name) {
+  symbols_t result = {.len = 0, .symbols = NULL};
   FILE *pfile;
   pfile = fopen(file_name, "rb");
   if (pfile == NULL) {
     fprintf(stderr, "Unable to open file %s\n", file_name);
-    return NULL;
+    return result;
   }
 
   Elf64_Ehdr hdr;
   if (read_header(pfile, &hdr)) {
     fclose(pfile);
-    return NULL;
+    return result;
   }
 
   Elf64_Shdr shdr[hdr.e_shnum];
-  if (read_section_header(pfile, &hdr, (Elf64_Shdr *)&shdr)) {
+  if (read_section_header(pfile, &hdr, shdr)) {
     fclose(pfile);
-    return NULL;
+    return result;
   }
 
-  size_t idx_symtab;
-  size_t idx_strtab;
-  get_symtab_strtab_idx(pfile, &hdr, (Elf64_Shdr *)&shdr, &idx_symtab,
-                        &idx_strtab);
+  size_t idx_symtab = -1;
+  size_t idx_strtab = -1;
+  get_symtab_strtab_idx(pfile, &hdr, shdr, &idx_symtab, &idx_strtab);
 
   printf("idx_symtab: %lu, idx_strtab: %lu\n", idx_symtab, idx_strtab);
-  // read_symbol_table(pfile, idx_symtab, idx_strtab, section_hdr);
+  result.symbols =
+      read_symbol_table(pfile, idx_symtab, idx_strtab, shdr, &result.len);
+
+  qsort(result.symbols, result.len, sizeof(symbol_t), compare);
 
   fclose(pfile);
 
-  return NULL;
+  return result;
 }

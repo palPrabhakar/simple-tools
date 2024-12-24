@@ -8,6 +8,11 @@ typedef struct symbol {
     const char *symbol_name;
 } symbol_t;
 
-symbol_t *get_elf_symbols(const char *);
+typedef struct symbols {
+  size_t len;
+  symbol_t *symbols;
+} symbols_t;
+
+symbols_t get_elf_symbols(const char *);
 
 #endif
