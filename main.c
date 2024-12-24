@@ -1,6 +1,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "read_elf.h"
+
 void read_elf(const char *file_name);
 
 uint64_t foo(uint64_t x) {
@@ -43,7 +45,7 @@ int main(int argc, char **argv) {
   printf("bar ret_val: 0x%lx\n", bar());
 
   printf("argv[0] %s\n", argv[0]);
-  read_elf(argv[0]);
+  get_elf_symbols(argv[0]);
 
   return 0;
 }

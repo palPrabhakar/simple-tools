@@ -1,96 +1,121 @@
-#include <stdio.h>
 #include <elf.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-void read_header(FILE *pfile, Elf64_Ehdr *hdr) {
-    printf("\n");
+#include "read_elf.h"
 
-    fread(hdr, sizeof(*hdr), 1, pfile);
+int read_header(FILE *pfile, Elf64_Ehdr *hdr) {
+  fseek(pfile, 0, SEEK_SET);
+  if (fread(hdr, sizeof(*hdr), 1, pfile) != 1) {
+    fprintf(stderr, "Unable to read elf headers\n");
+    return 1;
+  }
 
-    printf("e_indent: %s\n", hdr->e_ident);
+  if (hdr->e_type != ET_EXEC) {
+    fprintf(stderr, "Error Unknown elf type.\n");
+    return 1;
+  }
 
-    printf("e_type: %hu\n", hdr->e_type);
-    if(hdr->e_type != ET_EXEC) {
-        printf("Error Unknown elf type.\n");
-    }
+  if (hdr->e_machine != EM_X86_64) {
+    fprintf(stderr, "Error Unknown machine type.\n");
+    return 1;
+  }
 
-    printf("e_machine: %hu\n", hdr->e_machine);
-    if(hdr->e_machine != EM_X86_64) {
-        printf("Error Unknown machine type.\n");
-    }
-
-    printf("e_version: %u\n", hdr->e_version);
-    if(hdr->e_version == EV_NONE) {
-        printf("Error invalid elf version number.\n");
-    }
-
-    printf("e_entry: 0x%lx\n", hdr->e_entry);
-
-    printf("e_phoff: %lu\n", hdr->e_phoff);
-    printf("e_shoff: %lu\n", hdr->e_shoff);
-    printf("e_flags: %u\n", hdr->e_flags);
-    printf("e_ehsize: %hu\n", hdr->e_ehsize);
-    printf("e_phentsize: %hu\n", hdr->e_phentsize);
-    printf("e_phnum: %hu\n", hdr->e_phnum);
-    printf("e_shentsize: %hu\n", hdr->e_shentsize);
-    printf("e_shnum: %hu\n", hdr->e_shnum);
-    printf("e_shstrndx: %hu\n", hdr->e_shstrndx);
+  return 0;
 }
 
-void read_program_header(FILE *pfile, size_t offset, size_t num_headers) {
-    printf("\n");
-    printf("Reading program header\n");
-    Elf64_Phdr program_hdr[num_headers];
-    fseek(pfile, offset, SEEK_SET);
-    fread(&program_hdr, sizeof(program_hdr[0]), num_headers, pfile);
+void read_symbol_table(FILE *pfile, size_t idx_symtab, size_t idx_strtab,
+                       Elf64_Shdr section_header[]) {
+  Elf64_Shdr symtab = section_header[idx_symtab];
+  Elf64_Shdr strtab = section_header[idx_strtab];
 
-    for(size_t i = 0; i < num_headers; ++i) {
-        printf("\n");
-        printf("p_type: 0x%x\n", program_hdr[i].p_type);
-        printf("p_flags: %u\n", program_hdr[i].p_flags);
-        printf("p_offset: %lu\n", program_hdr[i].p_offset);
-        printf("p_vaddr: 0x%lx\n", program_hdr[i].p_vaddr);
-        printf("p_paddr: 0x%lx\n", program_hdr[i].p_paddr);
-        printf("p_filesz: %lu\n", program_hdr[i].p_filesz);
-        printf("p_memsz: %lu\n", program_hdr[i].p_memsz);
-        printf("p_align: %lu\n", program_hdr[i].p_align);
-        printf("\n");
-    }
+  Elf64_Sym *symbols = malloc(symtab.sh_size);
+  fseek(pfile, symtab.sh_offset, SEEK_SET);
+  fread(symbols, symtab.sh_size, 1, pfile);
+
+  // Read the string table
+  char *strtab_data = malloc(strtab.sh_size);
+  fseek(pfile, strtab.sh_offset, SEEK_SET);
+  fread(strtab_data, strtab.sh_size, 1, pfile);
+
+  int num_symbols = symtab.sh_size / symtab.sh_entsize;
+  for (int i = 0; i < num_symbols; i++) {
+    Elf64_Sym sym = symbols[i];
+    const char *name = &strtab_data[sym.st_name]; // Symbol name
+
+    printf("Symbol %d:\n", i);
+    printf("  Name: %s\n", name);
+    printf("  Value: 0x%lx\n", sym.st_value);
+    printf("  Size: %lu\n", sym.st_size);
+    printf("  Info: 0x%x\n", sym.st_info);
+    printf("  Section Index: %d\n", sym.st_shndx);
+  }
 }
 
-void read_section_header(FILE *pfile, size_t offset, size_t num_sections) {
-    printf("\n");
-    printf("Reading program header\n");
-    Elf64_Shdr section_hdr[num_sections];
-    fseek(pfile, offset, SEEK_SET);
-    fread(&section_hdr, sizeof(section_hdr[0]), num_sections, pfile);
+int read_section_header(FILE *pfile, Elf64_Ehdr *hdr, Elf64_Shdr *shdr) {
+  fseek(pfile, hdr->e_shoff, SEEK_SET);
+  if (fread(shdr, sizeof(*shdr), hdr->e_shnum, pfile) != hdr->e_shnum) {
+    fprintf(stderr, "Unable to read section headers\n");
+    return 1;
+  }
 
-    for(size_t i = 0; i < num_sections; ++i) {
-        printf("\n");
-        printf("sh_name: %u\n", section_hdr[i].sh_name);
-        printf("sh_type: %u\n", section_hdr[i].sh_type);
-        printf("sh_flags: %lu\n", section_hdr[i].sh_flags);
-        printf("sh_addr: 0x%lx\n", section_hdr[i].sh_addr);
-        printf("sh_offset: %lu\n", section_hdr[i].sh_offset);
-        printf("sh_size: %lu\n", section_hdr[i].sh_size);
-        printf("sh_link: %u\n", section_hdr[i].sh_link);
-        printf("sh_info: %u\n", section_hdr[i].sh_info);
-        printf("sh_addralign: %lu\n", section_hdr[i].sh_addralign);
-        printf("sh_entsize: %lu\n", section_hdr[i].sh_entsize);
-        printf("\n");
-    }
+  return 0;
 }
 
-void read_elf(const char *file_name) {
-    FILE *pfile;
-    pfile = fopen(file_name, "rb");
+int get_symtab_strtab_idx(FILE *pfile, Elf64_Ehdr *hdr, Elf64_Shdr *shdr,
+                          size_t *idx_symtab, size_t *idx_strtab) {
+  fseek(pfile, shdr[hdr->e_shstrndx].sh_offset, SEEK_SET);
+  char *shstrtab = malloc(shdr[hdr->e_shstrndx].sh_size);
+  if (fread(shstrtab, 1, shdr[hdr->e_shstrndx].sh_size, pfile) !=
+      shdr[hdr->e_shstrndx].sh_size) {
+    fprintf(stderr, "Unable to read the section header string table\n");
+    return 1;
+  }
 
-    if(pfile == NULL) {
-        printf("Unable to open file %s\n", file_name);
+  for (size_t i = 0; i < hdr->e_shnum; ++i) {
+    if (shdr[i].sh_type == SHT_SYMTAB &&
+        strcmp(&shstrtab[shdr[i].sh_name], ".symtab") == 0) {
+      *idx_symtab = i;
     }
+    if (shdr[i].sh_type == SHT_STRTAB &&
+        strcmp(&shstrtab[shdr[i].sh_name], ".strtab") == 0) {
+      *idx_strtab = i;
+    }
+  }
 
-    Elf64_Ehdr hdr;
-    read_header(pfile, &hdr);
-    read_program_header(pfile, hdr.e_phoff, hdr.e_phnum);
-    read_section_header(pfile, hdr.e_shoff, hdr.e_shnum);
+  return 0;
+}
+
+symbol_t *get_elf_symbols(const char *file_name) {
+  FILE *pfile;
+  pfile = fopen(file_name, "rb");
+  if (pfile == NULL) {
+    fprintf(stderr, "Unable to open file %s\n", file_name);
+    return NULL;
+  }
+
+  Elf64_Ehdr hdr;
+  if (read_header(pfile, &hdr)) {
     fclose(pfile);
+    return NULL;
+  }
+
+  Elf64_Shdr shdr[hdr.e_shnum];
+  if (read_section_header(pfile, &hdr, (Elf64_Shdr *)&shdr)) {
+    fclose(pfile);
+    return NULL;
+  }
+
+  size_t idx_symtab;
+  size_t idx_strtab;
+  get_symtab_strtab_idx(pfile, &hdr, (Elf64_Shdr *)&shdr, &idx_symtab,
+                        &idx_strtab);
+
+  printf("idx_symtab: %lu, idx_strtab: %lu\n", idx_symtab, idx_strtab);
+  // read_symbol_table(pfile, idx_symtab, idx_strtab, section_hdr);
+
+  fclose(pfile);
+
+  return NULL;
 }
