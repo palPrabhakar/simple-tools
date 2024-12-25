@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/bash
 
 if [[ $OSTYPE == "freebsd"* ]]; then
 	clang -g -O0 -static main.c read_elf.c -o main && ./main

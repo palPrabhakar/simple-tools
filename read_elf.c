@@ -5,6 +5,22 @@
 
 #include "read_elf.h"
 
+static symbols_t symbols;
+
+const char *find_name(uint64_t addr) {
+  for (size_t i = 0; i < symbols.len - 1; ++i) {
+    if(symbols.symbols[i].address == 0x0)
+      continue;
+
+    if(symbols.symbols[i].address == symbols.symbols[i+1].address)
+      continue;
+
+    if(symbols.symbols[i+1].address > addr)
+      return symbols.symbols[i].symbol_name;
+  }
+  return symbols.symbols[symbols.len - 1].symbol_name;
+}
+
 int compare(const void *a, const void *b) {
   symbol_t arg1 = *(const symbol_t *)a;
   symbol_t arg2 = *(const symbol_t *)b;
@@ -114,38 +130,41 @@ int get_symtab_strtab_idx(FILE *pfile, Elf64_Ehdr *hdr, Elf64_Shdr *shdr,
   return 0;
 }
 
-symbols_t get_elf_symbols(const char *file_name) {
-  symbols_t result = {.len = 0, .symbols = NULL};
+void init_stack_tracer(const char *file_name) {
+  // symbols_t result = {.len = 0, .symbols = NULL};
   FILE *pfile;
   pfile = fopen(file_name, "rb");
   if (pfile == NULL) {
     fprintf(stderr, "Unable to open file %s\n", file_name);
-    return result;
   }
 
   Elf64_Ehdr hdr;
   if (read_header(pfile, &hdr)) {
     fclose(pfile);
-    return result;
   }
 
   Elf64_Shdr shdr[hdr.e_shnum];
   if (read_section_header(pfile, &hdr, shdr)) {
     fclose(pfile);
-    return result;
   }
 
   size_t idx_symtab = -1;
   size_t idx_strtab = -1;
   get_symtab_strtab_idx(pfile, &hdr, shdr, &idx_symtab, &idx_strtab);
 
-  printf("idx_symtab: %lu, idx_strtab: %lu\n", idx_symtab, idx_strtab);
-  result.symbols =
-      read_symbol_table(pfile, idx_symtab, idx_strtab, shdr, &result.len);
+  if(idx_symtab == -1) {
+      fprintf(stderr, "Unable to find the symbol table index\n");
+      return;
+  }
+  if(idx_strtab == -1) {
+      fprintf(stderr, "Unable to find the string table index\n");
+      return;
+  }
 
-  qsort(result.symbols, result.len, sizeof(symbol_t), compare);
+  symbols.symbols =
+      read_symbol_table(pfile, idx_symtab, idx_strtab, shdr, &symbols.len);
+
+  qsort(symbols.symbols, symbols.len, sizeof(symbol_t), compare);
 
   fclose(pfile);
-
-  return result;
 }
