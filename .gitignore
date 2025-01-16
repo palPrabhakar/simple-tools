@@ -50,3 +50,10 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+main
+
+third-party/
+usb/
+fuse-example/
+mnt/
