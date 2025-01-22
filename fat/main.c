@@ -15,7 +15,7 @@ static FILE *fp = NULL;
 
 #define FAT16
 
-#define cprintf(format, ptr) printf(format, (int)sizeof(ptr), ptr);
+#define cprintf(format, ...) printf(format, __VA_ARGS__);
 
 typedef struct {
     uint32_t BS_jmpBoot : 24;
@@ -65,7 +65,8 @@ void read_file() {
     printf("---------------------------------\n");
 
     if (fread(&bpb, sizeof(BPB), 1, fp)) {
-        cprintf("BS_OEMName: %.*s\n", bpb.BS_OEMName);
+        cprintf("BS_OEMName: %.*s\n", (int)sizeof(bpb.BS_OEMName),
+                bpb.BS_OEMName);
         printf("BS_BytsPerSec: %d\n", bpb.BPB_BytsPerSec);
         printf("BPB_SecPerClus: %d\n", bpb.BPB_SecPerClus);
         printf("BPB_RsvdSecCnt: %d\n", bpb.BPB_RsvdSecCnt);
@@ -79,8 +80,9 @@ void read_file() {
         printf("BPB_HiddSec: %d\n", bpb.BPB_HiddSec);
         printf("BPB_TotSec32: %d\n", bpb.BPB_TotSec32);
         printf("BS_VolID: %u\n", bpb.BS_VolID);
-        cprintf("BS_VolLab: %.*s\n", bpb.BS_VolLab);
-        cprintf("BS_FilSysType: %.*s\n", bpb.BS_FilSysType);
+        cprintf("BS_VolLab: %.*s\n", (int)sizeof(bpb.BS_VolLab), bpb.BS_VolLab);
+        cprintf("BS_FilSysType: %.*s\n", (int)sizeof(bpb.BS_FilSysType),
+                bpb.BS_FilSysType);
     } else {
         printf("Error Reading\n");
         exit(1);
@@ -107,8 +109,7 @@ void read_file() {
         TotSec = bpb.BPB_TotSec32;
     }
 
-    size_t DataSec = TotSec - (bpb.BPB_RsvdSecCnt + (bpb.BPB_NumFATs * FATSz)
-    +
+    size_t DataSec = TotSec - (bpb.BPB_RsvdSecCnt + (bpb.BPB_NumFATs * FATSz) +
                                RootDirSectors);
 
     size_t clusterCount = DataSec / bpb.BPB_SecPerClus;
@@ -141,26 +142,31 @@ void read_file() {
     fseek(fp, RootDirOffset, SEEK_SET);
     size_t dir_size = 4;
     Dir_t dir[dir_size];
-    fread(&dir, sizeof(Dir_t), dir_size, fp);
-    cprintf("DIR_Name[0]: %.*s\n", dir[0].DIR_Name);
-    printf("DIR_Attr[0]: %d\n", dir[0].DIR_Attr);
-    printf("DIR_NTRes[0]: %d\n", dir[0].DIR_NTRes);
-    printf("DIR_CrtTimeTenth[0]: %d\n", dir[0].DIR_CrtTimeTenth);
+    fread(dir, sizeof(Dir_t), dir_size, fp);
+    for (size_t i = 0; i < dir_size; ++i) {
+        cprintf("DIR_Name[%lu]: %.*s\n", i, (int)sizeof(dir[i].DIR_Name),
+                dir[i].DIR_Name);
+        printf("DIR_Attr[%lu]: %d\n", i, dir[i].DIR_Attr);
+        printf("DIR_NTRes[%lu]: %d\n", i, dir[i].DIR_NTRes);
+        printf("DIR_CrtTimeTenth[%lu]: %d\n", i, dir[i].DIR_CrtTimeTenth);
+        printf("DIR_FstClusHI[%lu]: %d\n", i, dir[i].DIR_FstClusHI);
+        printf("DIR_FstClusLO[%lu]: %d\n", i, dir[i].DIR_FstClusLO);
+        printf("DIR_FileSize[%lu]: %d\n", i, dir[i].DIR_FileSize);
+        printf("\n");
+    }
 
-    cprintf("DIR_Name[1]: %.*s\n", dir[1].DIR_Name);
-    printf("DIR_Attr[1]: %d\n", dir[1].DIR_Attr);
-    printf("DIR_NTRes[1]: %d\n", dir[1].DIR_NTRes);
-    printf("DIR_CrtTimeTenth[1]: %d\n", dir[1].DIR_CrtTimeTenth);
-
-    cprintf("DIR_Name[2]: %.*s\n", dir[2].DIR_Name);
-    printf("DIR_Attr[2]: %d\n", dir[2].DIR_Attr);
-    printf("DIR_NTRes[2]: %d\n", dir[2].DIR_NTRes);
-    printf("DIR_CrtTimeTenth[2]: %d\n", dir[2].DIR_CrtTimeTenth);
-
-    cprintf("DIR_Name[3]: %.*s\n", dir[3].DIR_Name);
-    printf("DIR_Attr[3]: %d\n", dir[3].DIR_Attr);
-    printf("DIR_NTRes[3]: %d\n", dir[3].DIR_NTRes);
-    printf("DIR_CrtTimeTenth[3]: %d\n", dir[3].DIR_CrtTimeTenth);
+    printf("---------------------------------\n");
+    // read file
+    uint32_t FirstDataSector =
+        bpb.BPB_RsvdSecCnt + (bpb.BPB_NumFATs * FATSz) + RootDirSectors;
+    uint32_t FirstSectorOfCluster =
+        (dir[1].DIR_FstClusLO - 2) * bpb.BPB_SecPerClus + FirstDataSector;
+    uint32_t FirstSectorOfClusterOffset =
+        FirstSectorOfCluster * bpb.BPB_BytsPerSec;
+    fseek(fp, FirstSectorOfClusterOffset, SEEK_SET);
+    char file_buffer[dir[1].DIR_FileSize];
+    fread(file_buffer, sizeof(char), dir[1].DIR_FileSize, fp);
+    printf("\nFile Contents: %s\n", file_buffer);
 
     printf("---------------------------------\n");
 
