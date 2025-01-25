@@ -32,8 +32,13 @@ static void show_help(const char *program) {
            "\n");
 }
 
-static char *devfile = NULL;
-static FILE *fp = NULL;
+typedef struct fat_fuse {
+    FILE *fp;
+    uint32_t fat_sec;
+    uint32_t fat_sec_off;
+    uint32_t root_dir;
+    uint32_t root_dir_off;
+} fat_fuse;
 
 #define FAT16
 
@@ -79,126 +84,55 @@ typedef struct {
     uint32_t DIR_FileSize;
 } __attribute__((__packed__)) Dir_t;
 
-void read_file() {
+static void *fat_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
+    printf("fat_init\n");
 
-    BPB bpb;
-    printf("reading file: %lu\n", sizeof(BPB));
+    fat_fuse *ff = malloc(sizeof(fat_fuse));
 
-    printf("---------------------------------\n");
-
-    if (fread(&bpb, sizeof(BPB), 1, fp)) {
-        cprintf("BS_OEMName: %.*s\n", (int)sizeof(bpb.BS_OEMName),
-                bpb.BS_OEMName);
-        printf("BS_BytsPerSec: %d\n", bpb.BPB_BytsPerSec);
-        printf("BPB_SecPerClus: %d\n", bpb.BPB_SecPerClus);
-        printf("BPB_RsvdSecCnt: %d\n", bpb.BPB_RsvdSecCnt);
-        printf("BPB_NumFATs: %d\n", bpb.BPB_NumFATs);
-        printf("BPB_RootEntCnt: %d\n", bpb.BPB_RootEntCnt);
-        printf("BPB_TotSec16: %d\n", bpb.BPB_TotSec16);
-        printf("BPB_Media: %d\n", bpb.BPB_Media);
-        printf("BPB_FATSz16: %d\n", bpb.BPB_FATSz16);
-        printf("BPB_SecPerTrk: %d\n", bpb.BPB_SecPerTrk);
-        printf("BPB_NumHeads: %d\n", bpb.BPB_NumHeads);
-        printf("BPB_HiddSec: %d\n", bpb.BPB_HiddSec);
-        printf("BPB_TotSec32: %d\n", bpb.BPB_TotSec32);
-        printf("BS_VolID: %u\n", bpb.BS_VolID);
-        cprintf("BS_VolLab: %.*s\n", (int)sizeof(bpb.BS_VolLab), bpb.BS_VolLab);
-        cprintf("BS_FilSysType: %.*s\n", (int)sizeof(bpb.BS_FilSysType),
-                bpb.BS_FilSysType);
-    } else {
-        printf("Error Reading\n");
-        exit(1);
+    ff->fp = fopen(options.filename, "rb");
+    if (!ff->fp) {
+        fprintf(stderr, "error: unable to open device file\n");
+        goto set_err;
     }
 
-    printf("---------------------------------\n");
+    BPB bpb;
+    if (!fread(&bpb, sizeof(BPB), 1, ff->fp) || (bpb.BPB_FATSz16 == 0)) {
+        fprintf(stderr, "error: invalid fat16 filesystem\n");
+        goto set_err;
+    }
 
     size_t RootDirSectors =
         ((bpb.BPB_RootEntCnt * 32) + (bpb.BPB_BytsPerSec - 1)) /
         bpb.BPB_BytsPerSec;
-
-    size_t FATSz;
-    size_t TotSec;
-    if (bpb.BPB_FATSz16 != 0) {
-        FATSz = bpb.BPB_FATSz16;
-    } else {
-        // TODO:
-        // Read Specification
-    }
-
-    if (bpb.BPB_TotSec16 != 0) {
-        TotSec = bpb.BPB_TotSec16;
-    } else {
-        TotSec = bpb.BPB_TotSec32;
-    }
-
-    size_t DataSec = TotSec - (bpb.BPB_RsvdSecCnt + (bpb.BPB_NumFATs * FATSz) +
-                               RootDirSectors);
-
+    size_t TotSec = bpb.BPB_TotSec16 ? bpb.BPB_TotSec16 : bpb.BPB_TotSec32;
+    size_t DataSec =
+        TotSec - (bpb.BPB_RsvdSecCnt + (bpb.BPB_NumFATs * bpb.BPB_FATSz16) +
+                  RootDirSectors);
     size_t clusterCount = DataSec / bpb.BPB_SecPerClus;
-
-    printf("Cluster Count: %lu\n", clusterCount);
-
-    if (clusterCount > 4085 && clusterCount < 65525) {
-        printf("FAT Type: FAT16\n");
+    if (clusterCount < 4085 || clusterCount > 65525) {
+        fprintf(
+            stderr,
+            "error: invalid cluster count ERROR_EXITfor fat16 filesystem\n");
+        goto set_err;
     }
-
-    printf("---------------------------------\n");
 
     uint32_t FATStartSector = bpb.BPB_RsvdSecCnt;
     uint32_t FATSectorOffset = FATStartSector * bpb.BPB_BytsPerSec;
-    uint32_t FATSize = FATSz * bpb.BPB_NumFATs;
-
-    uint16_t value;
-    fseek(fp, FATSectorOffset, SEEK_SET);
-    fread(&value, sizeof(uint16_t), 1, fp);
-    printf("FAT[0] - Expected: %d, Found: %d\n", 0xFFF8, value);
-    fread(&value, sizeof(uint16_t), 1, fp);
-    printf("FAT[1] - Expected: %d, Found: %d\n", 0xFFFF, value);
-
-    printf("---------------------------------\n");
-
+    uint32_t FATSize = bpb.BPB_FATSz16 * bpb.BPB_NumFATs;
     uint32_t RootDirStartSector = FATStartSector + FATSize;
     uint32_t RootDirOffset = RootDirStartSector * bpb.BPB_BytsPerSec;
-    printf("sizeof(Dir_t): %lu\n", sizeof(Dir_t));
-    printf("Root Directory Sectors: %lu\n", RootDirSectors);
-    fseek(fp, RootDirOffset, SEEK_SET);
-    size_t dir_size = 4;
-    Dir_t dir[dir_size];
-    fread(dir, sizeof(Dir_t), dir_size, fp);
-    for (size_t i = 0; i < dir_size; ++i) {
-        cprintf("DIR_Name[%lu]: %.*s\n", i, (int)sizeof(dir[i].DIR_Name),
-                dir[i].DIR_Name);
-        printf("DIR_Attr[%lu]: %d\n", i, dir[i].DIR_Attr);
-        printf("DIR_NTRes[%lu]: %d\n", i, dir[i].DIR_NTRes);
-        printf("DIR_CrtTimeTenth[%lu]: %d\n", i, dir[i].DIR_CrtTimeTenth);
-        printf("DIR_FstClusHI[%lu]: %d\n", i, dir[i].DIR_FstClusHI);
-        printf("DIR_FstClusLO[%lu]: %d\n", i, dir[i].DIR_FstClusLO);
-        printf("DIR_FileSize[%lu]: %d\n", i, dir[i].DIR_FileSize);
-        printf("\n");
-    }
 
-    printf("---------------------------------\n");
-    // read file
-    uint32_t FirstDataSector =
-        bpb.BPB_RsvdSecCnt + (bpb.BPB_NumFATs * FATSz) + RootDirSectors;
-    uint32_t FirstSectorOfCluster =
-        (dir[1].DIR_FstClusLO - 2) * bpb.BPB_SecPerClus + FirstDataSector;
-    uint32_t FirstSectorOfClusterOffset =
-        FirstSectorOfCluster * bpb.BPB_BytsPerSec;
-    fseek(fp, FirstSectorOfClusterOffset, SEEK_SET);
-    char file_buffer[dir[1].DIR_FileSize];
-    fread(file_buffer, sizeof(char), dir[1].DIR_FileSize, fp);
-    printf("\nFile Contents: %s\n", file_buffer);
+    ff->fat_sec = FATStartSector;
+    ff->fat_sec_off = FATSectorOffset;
+    ff->root_dir = RootDirStartSector;
+    ff->root_dir_off = RootDirOffset;
 
-    printf("---------------------------------\n");
+exit:
+    return ff;
 
-    printf("done reading\n");
-}
-
-static void *fat_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
-    printf("fat_init\n");
-    devfile = realpath(options.filename, NULL);
-    return NULL;
+set_err:
+    fuse_exit(fuse_get_context()->fuse);
+    goto exit;
 }
 
 static int fat_getattr(const char *path, struct stat *stbuf,
@@ -233,7 +167,17 @@ static int fat_write(const char *path, const char *buf, size_t size,
     return 0;
 }
 
-static void fat_destroy(void *data) { printf("fat_destroy\n"); }
+static void fat_destroy(void *data) {
+    printf("fat_destroy\n");
+
+    if (data) {
+        fat_fuse *ff = (fat_fuse *)data;
+        if (ff->fp)
+            fclose(ff->fp);
+
+        free(ff);
+    }
+}
 
 // clang-format off
 static const struct fuse_operations fat_operations = {
@@ -254,8 +198,12 @@ int main(int argc, char **argv) {
     if (fuse_opt_parse(&args, &options, option_spec, NULL) == -1)
         return 1;
 
-    if (!options.filename) {
-        fprintf(stderr, "error: no filename specified\n");
+    char *devfile = realpath(options.filename, NULL);
+    if (devfile) {
+        free((void *)options.filename);
+        options.filename = devfile;
+    } else {
+        fprintf(stderr, "error: invalid filename specified\n");
         ret = 1;
         goto exit;
     }
@@ -273,6 +221,5 @@ int main(int argc, char **argv) {
 
 exit:
     fuse_opt_free_args(&args);
-    free(devfile); // calling free with null ptr is safe!
     return ret;
 }
