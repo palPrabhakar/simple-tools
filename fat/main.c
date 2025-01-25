@@ -3,12 +3,34 @@
 #define _FILE_OFFSET_BITS 64
 
 #include <fuse.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-static struct fuse_operations myfs_ops = {};
+// command-line options
+static struct options {
+    const char *filename;
+    int help;
+} options;
+
+// clang-format off
+#define OPTION(t, p) {t, offsetof(struct options, p), 1}
+static const struct fuse_opt option_spec[] = {
+    OPTION("--name=%s", filename),
+    OPTION("--help", help),
+    OPTION("-h", help),
+    FUSE_OPT_END
+};
+// clang-format on
+
+static void show_help(const char *program) {
+    printf("usage: %s [options] <mountpoint>\n\n", program);
+    printf("File-system specific options:\n"
+           "    --name=<s>          Name of the \"device\" file\n"
+           "\n");
+}
 
 static char *devfile = NULL;
 static FILE *fp = NULL;
@@ -173,24 +195,84 @@ void read_file() {
     printf("done reading\n");
 }
 
+static void *fat_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
+    printf("fat_init\n");
+    devfile = realpath(options.filename, NULL);
+    return NULL;
+}
+
+static int fat_getattr(const char *path, struct stat *stbuf,
+                       struct fuse_file_info *fi) {
+    printf("fat_getattr path: %s\n", path);
+    stbuf->st_mode = S_IFDIR | 0755;
+    stbuf->st_nlink = 2;
+    return 0;
+}
+
+static int fat_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+                       off_t offset, struct fuse_file_info *fi,
+                       enum fuse_readdir_flags flags) {
+    printf("fat_readdir path: %s\n", path);
+    return 0;
+}
+
+static int fat_open(const char *path, struct fuse_file_info *fi) {
+    printf("fat_open path: %s\n", path);
+    return 0;
+}
+
+static int fat_read(const char *path, char *buf, size_t size, off_t offset,
+                    struct fuse_file_info *fi) {
+    printf("fat_read path: %s\n", path);
+    return 0;
+}
+
+static int fat_write(const char *path, const char *buf, size_t size,
+                     off_t offset, struct fuse_file_info *fi) {
+    printf("fat_write path: %s\n", path);
+    return 0;
+}
+
+static void fat_destroy(void *data) { printf("fat_destroy\n"); }
+
+// clang-format off
+static const struct fuse_operations fat_operations = {
+    .init = fat_init,
+    .getattr = fat_getattr,
+    .readdir = fat_readdir,
+    .open = fat_open,
+    .read = fat_read,
+    .write = fat_write,
+    .destroy = fat_destroy
+};
+// clang-format on
+
 int main(int argc, char **argv) {
-    // get the device or image filename from arguments
-    for (int i = 1; i < argc; i++) {
-        if (argv[i][0] != '-') {
-            devfile = realpath(argv[i], NULL);
-            memcpy(&argv[i], &argv[i + 1], (argc - i) * sizeof(argv[0]));
-            argc--;
-            break;
+    int ret;
+    struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+
+    if (fuse_opt_parse(&args, &options, option_spec, NULL) == -1)
+        return 1;
+
+    if (!options.filename) {
+        fprintf(stderr, "error: no filename specified\n");
+        ret = 1;
+        goto exit;
+    }
+
+    if (options.help) {
+        show_help(argv[0]);
+        if (fuse_opt_add_arg(&args, "--help") != 0) {
+            ret = 1;
+            goto exit;
         }
+        args.argv[0][0] = '\0';
     }
 
-    fp = fopen(devfile, "rb");
-    if (!fp) {
-        exit(1);
-    }
+    ret = fuse_main(args.argc, args.argv, &fat_operations, NULL);
 
-    read_file();
-    fclose(fp);
-
-    return fuse_main(argc, argv, &myfs_ops, NULL);
+exit:
+    fuse_opt_free_args(&args);
+    free(devfile); // calling free with null ptr is safe!
+    return ret;
 }

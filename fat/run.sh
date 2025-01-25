@@ -1,3 +1,3 @@
 #!/usr/bin/bash
 
-./main -f -d -s test.img mnt/
+./main -f -d -s --name=test.img mnt
