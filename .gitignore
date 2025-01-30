@@ -57,6 +57,7 @@ third-party/
 usb/
 fuse-example/
 mnt/
+helper/
 
 compile_commands.json
 

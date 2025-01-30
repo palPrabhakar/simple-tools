@@ -2,12 +2,14 @@
 
 #define _FILE_OFFSET_BITS 64
 
+#include <errno.h>
 #include <fuse.h>
 #include <stddef.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#include "fat.h"
 
 // command-line options
 static struct options {
@@ -31,58 +33,6 @@ static void show_help(const char *program) {
            "    --name=<s>          Name of the \"device\" file\n"
            "\n");
 }
-
-typedef struct fat_fuse {
-    FILE *fp;
-    uint32_t fat_sec;
-    uint32_t fat_sec_off;
-    uint32_t root_dir;
-    uint32_t root_dir_off;
-} fat_fuse;
-
-#define FAT16
-
-#define cprintf(format, ...) printf(format, __VA_ARGS__);
-
-typedef struct {
-    uint32_t BS_jmpBoot : 24;
-    char BS_OEMName[8];
-    uint16_t BPB_BytsPerSec;
-    uint8_t BPB_SecPerClus;
-    uint16_t BPB_RsvdSecCnt;
-    uint8_t BPB_NumFATs;
-    uint16_t BPB_RootEntCnt;
-    uint16_t BPB_TotSec16;
-    uint8_t BPB_Media;
-    uint16_t BPB_FATSz16;
-    uint16_t BPB_SecPerTrk;
-    uint16_t BPB_NumHeads;
-    uint32_t BPB_HiddSec;
-    uint32_t BPB_TotSec32;
-#ifdef FAT16
-    uint8_t BS_DrvNum;
-    uint8_t BS_Reserved1;
-    uint8_t BS_BootSig;
-    uint32_t BS_VolID;
-    char BS_VolLab[11];
-    char BS_FilSysType[8];
-#endif
-} __attribute__((__packed__)) BPB;
-
-typedef struct {
-    char DIR_Name[11];
-    uint8_t DIR_Attr;
-    uint8_t DIR_NTRes;
-    uint8_t DIR_CrtTimeTenth;
-    uint16_t DIR_CrtTime;
-    uint16_t DIR_CrtDate;
-    uint16_t DIR_LstAccDate;
-    uint16_t DIR_FstClusHI;
-    uint16_t DIR_WrtTime;
-    uint16_t DIR_WrtDate;
-    uint16_t DIR_FstClusLO;
-    uint32_t DIR_FileSize;
-} __attribute__((__packed__)) Dir_t;
 
 static void *fat_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
     printf("fat_init\n");
@@ -138,9 +88,33 @@ set_err:
 static int fat_getattr(const char *path, struct stat *stbuf,
                        struct fuse_file_info *fi) {
     printf("fat_getattr path: %s\n", path);
-    stbuf->st_mode = S_IFDIR | 0755;
-    stbuf->st_nlink = 2;
-    return 0;
+
+    (void)fi;
+    int res = 0;
+
+    char *fpath = strdup(path);
+    size_t count = 0;
+    char **plist = parse_path(fpath, &count);
+
+    if (count == 0) {
+        res = -ENOENT;
+        goto exit;
+    }
+
+    if (count == 1) {
+        stbuf->st_mode = S_IFDIR | 0755;
+        stbuf->st_nlink = 2;
+    } else {
+        // TODO:
+        for (int i = 1; i < count; ++i) {
+            char *file_or_dir = plist[i];
+        }
+    }
+
+exit:
+    free(fpath);
+    free(plist);
+    return res;
 }
 
 static int fat_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
