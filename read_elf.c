@@ -9,13 +9,13 @@ static symbols_t symbols;
 
 const char *find_name(uint64_t addr) {
   for (size_t i = 0; i < symbols.len - 1; ++i) {
-    if(symbols.symbols[i].address == 0x0)
+    if (symbols.symbols[i].address == 0x0)
       continue;
 
-    if(symbols.symbols[i].address == symbols.symbols[i+1].address)
+    if (symbols.symbols[i].address == symbols.symbols[i + 1].address)
       continue;
 
-    if(symbols.symbols[i+1].address > addr)
+    if (symbols.symbols[i + 1].address > addr)
       return symbols.symbols[i].symbol_name;
   }
   return symbols.symbols[symbols.len - 1].symbol_name;
@@ -57,11 +57,11 @@ symbol_t *read_symbol_table(FILE *pfile, size_t idx_symtab, size_t idx_strtab,
   Elf64_Shdr symtab = section_header[idx_symtab];
   Elf64_Shdr strtab = section_header[idx_strtab];
 
-  Elf64_Sym *symbols = malloc(symtab.sh_size);
+  Elf64_Sym *elf_symbols = malloc(symtab.sh_size);
   fseek(pfile, symtab.sh_offset, SEEK_SET);
-  if (fread(symbols, symtab.sh_size, 1, pfile) != 1) {
+  if (fread(elf_symbols, symtab.sh_size, 1, pfile) != 1) {
     fprintf(stderr, "Unable to read the symbol table\n");
-    free(symbols);
+    free(elf_symbols);
     return NULL;
   }
 
@@ -79,7 +79,7 @@ symbol_t *read_symbol_table(FILE *pfile, size_t idx_symtab, size_t idx_strtab,
   symbol_t *symbol_arr = malloc(sizeof(symbol_t) * *num_symbols);
 
   for (size_t i = 0; i < *num_symbols; i++) {
-    Elf64_Sym sym = symbols[i];
+    Elf64_Sym sym = elf_symbols[i];
     const char *name = &strtab_data[sym.st_name]; // Symbol name
     size_t len = strlen(name);
     symbol_arr[i].symbol_name = malloc(sizeof(char) * len);
@@ -87,7 +87,7 @@ symbol_t *read_symbol_table(FILE *pfile, size_t idx_symtab, size_t idx_strtab,
     symbol_arr[i].address = sym.st_value;
   }
 
-  free(symbols);
+  free(elf_symbols);
   free(strtab_data);
 
   return symbol_arr;
@@ -148,17 +148,17 @@ void init_stack_tracer(const char *file_name) {
     fclose(pfile);
   }
 
-  size_t idx_symtab = -1;
-  size_t idx_strtab = -1;
+  size_t idx_symtab = -1UL;
+  size_t idx_strtab = -1UL;
   get_symtab_strtab_idx(pfile, &hdr, shdr, &idx_symtab, &idx_strtab);
 
-  if(idx_symtab == -1) {
-      fprintf(stderr, "Unable to find the symbol table index\n");
-      return;
+  if (idx_symtab == -1UL) {
+    fprintf(stderr, "Unable to find the symbol table index\n");
+    return;
   }
-  if(idx_strtab == -1) {
-      fprintf(stderr, "Unable to find the string table index\n");
-      return;
+  if (idx_strtab == -1UL) {
+    fprintf(stderr, "Unable to find the string table index\n");
+    return;
   }
 
   symbols.symbols =
@@ -167,4 +167,11 @@ void init_stack_tracer(const char *file_name) {
   qsort(symbols.symbols, symbols.len, sizeof(symbol_t), compare);
 
   fclose(pfile);
+}
+
+void deinit_stack_tracer(void) {
+  for (size_t i = 0; i < symbols.len; ++i) {
+    free((void *)symbols.symbols[i].symbol_name);
+  }
+  free(symbols.symbols);
 }

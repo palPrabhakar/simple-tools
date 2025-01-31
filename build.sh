@@ -1,7 +1,9 @@
-#!/usr/bin/bash
+#!/usr/local/bin/bash
+
+CFLAGS="-Wall -Wpedantic -Wextra -Werror -g -O0"
 
 if [[ $OSTYPE == "freebsd"* ]]; then
-	clang -g -O0 -static main.c read_elf.c -o main && ./main
+	clang $CFLAGS -static main.c read_elf.c -o main && ./main
 elif [[ $OSTYPE == "linux-gnu"* ]]; then
-	gcc -g -O0 main.c read_elf.c -o main && ./main
+	gcc $CFLAGS main.c read_elf.c -o main && ./main
 fi

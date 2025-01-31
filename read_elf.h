@@ -17,9 +17,10 @@ typedef struct symbols {
 } symbols_t;
 
 void init_stack_tracer(const char *);
+void deinit_stack_tracer(void);
 const char *find_name(uint64_t);
 
-__attribute__((__always_inline__)) static inline int64_t get_rbp() {
+__attribute__((__always_inline__)) static inline int64_t get_rbp(void) {
   int64_t rbp;
   __asm__ volatile("mov %%rbp, %0"
                    : "=r"(rbp) // Output operand
