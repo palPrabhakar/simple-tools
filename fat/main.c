@@ -1,3 +1,5 @@
+#include <stdint.h>
+#include <stdio.h>
 #define FUSE_USE_VERSION 31
 
 #define _FILE_OFFSET_BITS 64
@@ -76,6 +78,7 @@ static void *fat_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
     ff->fat_sec_off = FATSectorOffset;
     ff->root_dir = RootDirStartSector;
     ff->root_dir_off = RootDirOffset;
+    ff->root_dir_ent = bpb.BPB_RootEntCnt;
 
 exit:
     return ff;
@@ -101,14 +104,14 @@ static int fat_getattr(const char *path, struct stat *stbuf,
         goto exit;
     }
 
+    stbuf->st_mode = S_IFDIR | 0755;
+    stbuf->st_nlink = 2;
     if (count == 1) {
-        stbuf->st_mode = S_IFDIR | 0755;
-        stbuf->st_nlink = 2;
     } else {
         // TODO:
-        for (int i = 1; i < count; ++i) {
-            char *file_or_dir = plist[i];
-        }
+        // for (int i = 1; i < count; ++i) {
+        //     // char *file_or_dir = plist[i];
+        // }
     }
 
 exit:
@@ -121,7 +124,43 @@ static int fat_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                        off_t offset, struct fuse_file_info *fi,
                        enum fuse_readdir_flags flags) {
     printf("fat_readdir path: %s\n", path);
-    return 0;
+    (void)offset;
+    (void)fi;
+    (void)flags;
+    int res = 0;
+
+    char *fpath = strdup(path);
+    size_t count = 0;
+    char **plist = parse_path(fpath, &count);
+
+    if (count == 0) {
+        res = -ENOENT;
+        goto exit;
+    }
+
+    fat_fuse *ff = fuse_get_context()->private_data;
+
+    if (count == 1) {
+        fseek(ff->fp, ff->root_dir_off, SEEK_SET);
+        dir_t *dir = malloc(sizeof(dir_t) * ff->root_dir_ent);
+        fread(dir, sizeof(dir_t), ff->root_dir_ent, ff->fp);
+        for (size_t i = 0; i < ff->root_dir_ent; ++i) {
+            if ((uint8_t)dir[i].DIR_Name[0] == 0x00) {
+                break;
+            }
+            if ((uint8_t)dir[i].DIR_Name[0] != 0xE5) {
+                filler(buf, dir[i].DIR_Name, NULL, i * 32, FUSE_FILL_DIR_PLUS);
+            }
+        }
+        free(dir);
+    } else {
+      // TODO
+    }
+
+exit:
+    free(fpath);
+    free(plist);
+    return res;
 }
 
 static int fat_open(const char *path, struct fuse_file_info *fi) {

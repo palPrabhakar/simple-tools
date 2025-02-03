@@ -6,10 +6,11 @@
 
 typedef struct fat_fuse {
     FILE *fp;
-    uint32_t fat_sec;
-    uint32_t fat_sec_off;
-    uint32_t root_dir;
-    uint32_t root_dir_off;
+    unsigned int fat_sec;
+    unsigned int fat_sec_off;
+    unsigned int root_dir;
+    unsigned int root_dir_off;
+    size_t root_dir_ent;
 } fat_fuse;
 
 #define FAT16
@@ -54,7 +55,7 @@ typedef struct {
     uint16_t DIR_WrtDate;
     uint16_t DIR_FstClusLO;
     uint32_t DIR_FileSize;
-} __attribute__((__packed__)) Dir_t;
+} __attribute__((__packed__)) dir_t;
 
 char **parse_path(const char *, size_t *);
 
