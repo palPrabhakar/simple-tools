@@ -1,3 +1,4 @@
+#include <asm-generic/errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #define FUSE_USE_VERSION 31
@@ -104,10 +105,47 @@ static int fat_getattr(const char *path, struct stat *stbuf,
         goto exit;
     }
 
-    stbuf->st_mode = S_IFDIR | 0755;
-    stbuf->st_nlink = 2;
     if (count == 1) {
+        stbuf->st_mode = S_IFDIR | 0755;
+        stbuf->st_nlink = 2;
+    } else if (count == 2) {
+        fat_fuse *ff = fuse_get_context()->private_data;
+        fseek(ff->fp, ff->root_dir_off, SEEK_SET);
+        dir_t *dir = malloc(sizeof(dir_t) * ff->root_dir_ent);
+        fread(dir, sizeof(dir_t), ff->root_dir_ent, ff->fp);
+        res = -ENOENT;
+        for (size_t i = 0;
+             i < ff->root_dir_ent && (uint8_t)dir[i].DIR_Name[0] != 0x00; ++i) {
+            if ((uint8_t)dir[i].DIR_Name[0] != 0xE5) {
+                char name[12] = {'\0'};
+                size_t j;
+                for (j = 0; j < 8 && dir[i].DIR_Name[j] != ' '; ++j)
+                    name[j] = dir[i].DIR_Name[j];
+                if (dir[i].DIR_Attr != 0x10) {
+                    name[j++] = '.';
+                    for (int k = 8; k < 11 && dir[i].DIR_Name[k] != ' '; ++k)
+                        name[j++] = dir[i].DIR_Name[k];
+                }
+
+                if (strcmp(name, &path[1]) == 0) {
+                    // TODO
+                    // Set proper usage flags
+                    if (dir[i].DIR_Attr == 0x10) {
+                        stbuf->st_mode = S_IFDIR | 0755;
+                        stbuf->st_nlink = 2;
+                    } else {
+                        stbuf->st_mode = S_IFREG | 0644;
+                        stbuf->st_nlink = 1;
+                    }
+                    res = 0;
+                    break;
+                }
+            }
+        }
+        free(dir);
     } else {
+        stbuf->st_mode = S_IFREG | 0444;
+        stbuf->st_nlink = 1;
         // TODO:
         // for (int i = 1; i < count; ++i) {
         //     // char *file_or_dir = plist[i];
@@ -144,17 +182,25 @@ static int fat_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         fseek(ff->fp, ff->root_dir_off, SEEK_SET);
         dir_t *dir = malloc(sizeof(dir_t) * ff->root_dir_ent);
         fread(dir, sizeof(dir_t), ff->root_dir_ent, ff->fp);
-        for (size_t i = 0; i < ff->root_dir_ent; ++i) {
-            if ((uint8_t)dir[i].DIR_Name[0] == 0x00) {
-                break;
-            }
+        for (size_t i = 0;
+             i < ff->root_dir_ent && (uint8_t)dir[i].DIR_Name[0] != 0x00; ++i) {
             if ((uint8_t)dir[i].DIR_Name[0] != 0xE5) {
-                filler(buf, dir[i].DIR_Name, NULL, i * 32, FUSE_FILL_DIR_PLUS);
+                char name[12] = {'\0'};
+                size_t j;
+                for (j = 0; j < 8 && dir[i].DIR_Name[j] != ' '; ++j)
+                    name[j] = dir[i].DIR_Name[j];
+                if (dir[i].DIR_Attr != 0x10) {
+                    name[j++] = '.';
+                    for (int k = 8; k < 11 && dir[i].DIR_Name[k] != ' '; ++k) {
+                        name[j++] = dir[i].DIR_Name[k];
+                    }
+                }
+                filler(buf, name, NULL, 0, FUSE_FILL_DIR_PLUS);
             }
         }
         free(dir);
     } else {
-      // TODO
+        // TODO
     }
 
 exit:
