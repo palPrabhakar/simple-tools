@@ -5,6 +5,10 @@
 
 #include "read_elf.h"
 
+#ifdef __cplusplus
+#include <cxxabi.h>
+#endif
+
 static symbols_t symbols;
 
 const char *find_name(uint64_t addr) {
@@ -57,7 +61,7 @@ symbol_t *read_symbol_table(FILE *pfile, size_t idx_symtab, size_t idx_strtab,
   Elf64_Shdr symtab = section_header[idx_symtab];
   Elf64_Shdr strtab = section_header[idx_strtab];
 
-  Elf64_Sym *elf_symbols = malloc(symtab.sh_size);
+  Elf64_Sym *elf_symbols = (Elf64_Sym *)malloc(symtab.sh_size);
   fseek(pfile, symtab.sh_offset, SEEK_SET);
   if (fread(elf_symbols, symtab.sh_size, 1, pfile) != 1) {
     fprintf(stderr, "Unable to read the symbol table\n");
@@ -66,7 +70,7 @@ symbol_t *read_symbol_table(FILE *pfile, size_t idx_symtab, size_t idx_strtab,
   }
 
   // Read the string table
-  char *strtab_data = malloc(strtab.sh_size);
+  char *strtab_data = (char *)malloc(strtab.sh_size);
   fseek(pfile, strtab.sh_offset, SEEK_SET);
   if (fread(strtab_data, strtab.sh_size, 1, pfile) != 1) {
     fprintf(stderr, "Unable to read the string table\n");
@@ -76,14 +80,25 @@ symbol_t *read_symbol_table(FILE *pfile, size_t idx_symtab, size_t idx_strtab,
 
   *num_symbols = symtab.sh_size / symtab.sh_entsize;
 
-  symbol_t *symbol_arr = malloc(sizeof(symbol_t) * *num_symbols);
+  symbol_t *symbol_arr = (symbol_t *)malloc(sizeof(symbol_t) * *num_symbols);
 
   for (size_t i = 0; i < *num_symbols; i++) {
     Elf64_Sym sym = elf_symbols[i];
     const char *name = &strtab_data[sym.st_name]; // Symbol name
+
+#ifdef __cplusplus
+    int status;
+    symbol_arr[i].symbol_name = abi::__cxa_demangle(name, NULL, NULL, &status);
+    if (status) { // Fallback
+      size_t len = strlen(name);
+      symbol_arr[i].symbol_name = (char *)malloc(sizeof(char) * len);
+      memcpy((void *)symbol_arr[i].symbol_name, name, len);
+    }
+#else
     size_t len = strlen(name);
-    symbol_arr[i].symbol_name = malloc(sizeof(char) * len);
+    symbol_arr[i].symbol_name = (char *)malloc(sizeof(char) * len);
     memcpy((void *)symbol_arr[i].symbol_name, name, len);
+#endif
     symbol_arr[i].address = sym.st_value;
   }
 
@@ -106,7 +121,7 @@ int read_section_header(FILE *pfile, Elf64_Ehdr *hdr, Elf64_Shdr *shdr) {
 int get_symtab_strtab_idx(FILE *pfile, Elf64_Ehdr *hdr, Elf64_Shdr *shdr,
                           size_t *idx_symtab, size_t *idx_strtab) {
   fseek(pfile, shdr[hdr->e_shstrndx].sh_offset, SEEK_SET);
-  char *shstrtab = malloc(shdr[hdr->e_shstrndx].sh_size);
+  char *shstrtab = (char *)malloc(shdr[hdr->e_shstrndx].sh_size);
   if (fread(shstrtab, 1, shdr[hdr->e_shstrndx].sh_size, pfile) !=
       shdr[hdr->e_shstrndx].sh_size) {
     fprintf(stderr, "Unable to read the section header string table\n");
@@ -131,7 +146,6 @@ int get_symtab_strtab_idx(FILE *pfile, Elf64_Ehdr *hdr, Elf64_Shdr *shdr,
 }
 
 void init_stack_tracer(const char *file_name) {
-  // symbols_t result = {.len = 0, .symbols = NULL};
   FILE *pfile;
   pfile = fopen(file_name, "rb");
   if (pfile == NULL) {
@@ -143,7 +157,7 @@ void init_stack_tracer(const char *file_name) {
     fclose(pfile);
   }
 
-  Elf64_Shdr shdr[hdr.e_shnum];
+  Elf64_Shdr *shdr = (Elf64_Shdr *)malloc(sizeof(Elf64_Shdr)*hdr.e_shnum);
   if (read_section_header(pfile, &hdr, shdr)) {
     fclose(pfile);
   }
@@ -166,6 +180,7 @@ void init_stack_tracer(const char *file_name) {
 
   qsort(symbols.symbols, symbols.len, sizeof(symbol_t), compare);
 
+  free(shdr);
   fclose(pfile);
 }
 

@@ -9,9 +9,9 @@ if [ $# -eq 0 ]; then
     fi
 else
     if [[ $OSTYPE == "freebsd"* ]]; then
-        clang $CFLAGS -static main.cpp read_elf.c -o main && ./main
+        clang++ $CFLAGS -static main.cpp read_elf.c -o main && ./main
     elif [[ $OSTYPE == "linux-gnu"* ]]; then
-        gcc $CFLAGS main.cpp read_elf.c -o main && ./main
+        g++ $CFLAGS main.cpp read_elf.c -o main && ./main
     fi
 fi
 
