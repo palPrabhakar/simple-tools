@@ -11,6 +11,9 @@ typedef struct fat_fuse {
     unsigned int root_dir;
     unsigned int root_dir_off;
     size_t root_dir_ent;
+    unsigned int first_data_sec;
+    size_t sec_per_clus;
+    size_t bytes_per_sec;
 } fat_fuse;
 
 #define FAT16

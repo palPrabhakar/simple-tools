@@ -75,11 +75,18 @@ static void *fat_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
     uint32_t RootDirStartSector = FATStartSector + FATSize;
     uint32_t RootDirOffset = RootDirStartSector * bpb.BPB_BytsPerSec;
 
+    uint32_t FirstDataSector = bpb.BPB_RsvdSecCnt +
+                               (bpb.BPB_NumFATs * bpb.BPB_FATSz16) +
+                               RootDirSectors;
+
     ff->fat_sec = FATStartSector;
     ff->fat_sec_off = FATSectorOffset;
     ff->root_dir = RootDirStartSector;
     ff->root_dir_off = RootDirOffset;
     ff->root_dir_ent = bpb.BPB_RootEntCnt;
+    ff->first_data_sec = FirstDataSector;
+    ff->sec_per_clus = bpb.BPB_SecPerClus;
+    ff->bytes_per_sec = bpb.BPB_BytsPerSec;
 
 exit:
     return ff;
@@ -127,7 +134,7 @@ static int fat_getattr(const char *path, struct stat *stbuf,
                         name[j++] = dir[i].DIR_Name[k];
                 }
 
-                if (strcmp(name, &path[1]) == 0) {
+                if (strcmp(name, plist[0]) == 0) {
                     // TODO
                     // Set proper usage flags
                     if (dir[i].DIR_Attr == 0x10) {
@@ -136,6 +143,7 @@ static int fat_getattr(const char *path, struct stat *stbuf,
                     } else {
                         stbuf->st_mode = S_IFREG | 0644;
                         stbuf->st_nlink = 1;
+                        stbuf->st_size = dir[i].DIR_FileSize;
                     }
                     res = 0;
                     break;
@@ -211,13 +219,66 @@ exit:
 
 static int fat_open(const char *path, struct fuse_file_info *fi) {
     printf("fat_open path: %s\n", path);
-    return 0;
+
+    int res = 0;
+    char *fpath = strdup(path);
+    size_t count = 0;
+    char **plist = parse_path(fpath, &count);
+
+    if (count == 1) {
+        res = -ENOENT;
+    } else if (count == 2) {
+        fat_fuse *ff = fuse_get_context()->private_data;
+        fseek(ff->fp, ff->root_dir_off, SEEK_SET);
+        dir_t *dir = malloc(sizeof(dir_t) * ff->root_dir_ent);
+        fread(dir, sizeof(dir_t), ff->root_dir_ent, ff->fp);
+        res = -ENOENT;
+        for (size_t i = 0;
+             i < ff->root_dir_ent && (uint8_t)dir[i].DIR_Name[0] != 0x00; ++i) {
+            if ((uint8_t)dir[i].DIR_Name[0] != 0xE5) {
+                char name[12] = {'\0'};
+                size_t j;
+                for (j = 0; j < 8 && dir[i].DIR_Name[j] != ' '; ++j)
+                    name[j] = dir[i].DIR_Name[j];
+                if (dir[i].DIR_Attr != 0x10) {
+                    name[j++] = '.';
+                    for (int k = 8; k < 11 && dir[i].DIR_Name[k] != ' '; ++k)
+                        name[j++] = dir[i].DIR_Name[k];
+                }
+
+                if (strcmp(name, plist[0]) == 0) {
+                    // If file found
+                    // Set to the handle to the offset
+                    res = 0;
+                    fi->fh = ((dir[i].DIR_FstClusLO - 2) * ff->sec_per_clus +
+                              ff->first_data_sec) *
+                             ff->bytes_per_sec;
+                    break;
+                }
+            }
+        }
+        free(dir);
+    } else {
+        // TODO:
+    }
+
+    free(fpath);
+    free(plist);
+    return res;
 }
 
 static int fat_read(const char *path, char *buf, size_t size, off_t offset,
                     struct fuse_file_info *fi) {
     printf("fat_read path: %s\n", path);
-    return 0;
+    (void)path;
+
+    fat_fuse *ff = fuse_get_context()->private_data;
+    fseek(ff->fp, fi->fh + offset, SEEK_SET);
+    int bytes_read = fread(buf, sizeof(char), size, ff->fp);
+    if (bytes_read == 0)
+        return -errno;
+
+    return bytes_read;
 }
 
 static int fat_write(const char *path, const char *buf, size_t size,
