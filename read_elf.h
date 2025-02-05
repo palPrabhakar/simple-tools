@@ -1,5 +1,8 @@
 #ifndef _READ_ELF_H
 #define _READ_ELF_H
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include <stddef.h>
 #include <stdint.h>
@@ -40,5 +43,7 @@ __attribute__((__always_inline__)) static inline int64_t get_rbp(void) {
   }                                                                            \
   printf("return addr bar: 0x%lx, name: %s\n", addr, find_name(addr));
 
-
+#ifdef __cplusplus
+}
+#endif
 #endif
