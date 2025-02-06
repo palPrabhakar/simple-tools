@@ -118,44 +118,25 @@ static int fat_getattr(const char *path, struct stat *stbuf,
         stbuf->st_nlink = 2;
     } else if (count == 2) {
         fat_fuse *ff = fuse_get_context()->private_data;
-        dir_t *dir = ff->root_dir;
-        res = -ENOENT;
-        for (size_t i = 0;
-             i < ff->root_dir_ent && (uint8_t)dir[i].DIR_Name[0] != 0x00; ++i) {
-            if ((uint8_t)dir[i].DIR_Name[0] != 0xE5) {
-                char name[12] = {'\0'};
-                size_t j;
-                for (j = 0; j < 8 && dir[i].DIR_Name[j] != ' '; ++j)
-                    name[j] = dir[i].DIR_Name[j];
-                if (dir[i].DIR_Attr != 0x10) {
-                    name[j++] = '.';
-                    for (int k = 8; k < 11 && dir[i].DIR_Name[k] != ' '; ++k)
-                        name[j++] = dir[i].DIR_Name[k];
-                }
 
-                if (strcmp(name, plist[0]) == 0) {
-                    // TODO
-                    // Set proper usage flags
-                    if (dir[i].DIR_Attr == 0x10) {
-                        stbuf->st_mode = S_IFDIR | 0755;
-                        stbuf->st_nlink = 2;
-                    } else {
-                        stbuf->st_mode = S_IFREG | 0644;
-                        stbuf->st_nlink = 1;
-                        stbuf->st_size = dir[i].DIR_FileSize;
-                    }
-                    res = 0;
-                    break;
-                }
-            }
+        dir_t dir;
+        if (get_dir(plist, 0, count - 1, ff, ff->root_dir, ff->root_dir_ent,
+                    &dir)) {
+            res = -ENOENT;
+            goto exit;
+        }
+
+        if (dir.DIR_Attr == 0x10) {
+            stbuf->st_mode = S_IFDIR | 0755;
+            stbuf->st_nlink = 2;
+        } else {
+            stbuf->st_mode = S_IFREG | 0644;
+            stbuf->st_nlink = 1;
+            stbuf->st_size = dir.DIR_FileSize;
         }
     } else {
         stbuf->st_mode = S_IFREG | 0444;
         stbuf->st_nlink = 1;
-        // TODO:
-        // for (int i = 1; i < count; ++i) {
-        //     // char *file_or_dir = plist[i];
-        // }
     }
 
 exit:
@@ -224,32 +205,16 @@ static int fat_open(const char *path, struct fuse_file_info *fi) {
         res = -ENOENT;
     } else if (count == 2) {
         fat_fuse *ff = fuse_get_context()->private_data;
-        dir_t *dir = ff->root_dir;
-        res = -ENOENT;
-        for (size_t i = 0;
-             i < ff->root_dir_ent && (uint8_t)dir[i].DIR_Name[0] != 0x00; ++i) {
-            if ((uint8_t)dir[i].DIR_Name[0] != 0xE5) {
-                char name[12] = {'\0'};
-                size_t j;
-                for (j = 0; j < 8 && dir[i].DIR_Name[j] != ' '; ++j)
-                    name[j] = dir[i].DIR_Name[j];
-                if (dir[i].DIR_Attr != 0x10) {
-                    name[j++] = '.';
-                    for (int k = 8; k < 11 && dir[i].DIR_Name[k] != ' '; ++k)
-                        name[j++] = dir[i].DIR_Name[k];
-                }
 
-                if (strcmp(name, plist[0]) == 0) {
-                    // If file found
-                    // Set to the handle to the offset
-                    res = 0;
-                    fi->fh = ((dir[i].DIR_FstClusLO - 2) * ff->sec_per_clus +
-                              ff->first_data_sec) *
-                             ff->bytes_per_sec;
-                    break;
-                }
-            }
+        dir_t dir;
+        if (get_dir(plist, 0, count - 1, ff, ff->root_dir, ff->root_dir_ent,
+                    &dir)) {
+            res = -ENOENT;
         }
+
+        fi->fh =
+            ((dir.DIR_FstClusLO - 2) * ff->sec_per_clus + ff->first_data_sec) *
+            ff->bytes_per_sec;
     } else {
         // TODO:
     }

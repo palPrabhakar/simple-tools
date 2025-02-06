@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 static const size_t increment_factor = 10;
 
@@ -48,9 +49,36 @@ char **parse_path(char *path, size_t *count) {
     return paths;
 }
 
-// void get_fat_obj(char **plist, size_t idx, size_t len, fat_fuse *ff,
-//                  dir_t *dir) {
-//     if (idx == len - 1) {
-//         // last one
-//     }
-// }
+static int search_dirs(dir_t *dir, int len, const char *dname, dir_t *rval) {
+    for (size_t i = 0;
+         i < len && (uint8_t)dir[i].DIR_Name[0] != 0x00; ++i) {
+        if ((uint8_t)dir[i].DIR_Name[0] != 0xE5) {
+            char name[12] = {'\0'};
+            size_t j;
+            for (j = 0; j < 8 && dir[i].DIR_Name[j] != ' '; ++j)
+                name[j] = dir[i].DIR_Name[j];
+            if (dir[i].DIR_Attr != 0x10) {
+                name[j++] = '.';
+                for (int k = 8; k < 11 && dir[i].DIR_Name[k] != ' '; ++k)
+                    name[j++] = dir[i].DIR_Name[k];
+            }
+
+            if (strcmp(name, dname) == 0) {
+                memcpy(rval, &dir[i], sizeof(dir_t));
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
+
+int get_dir(char **plist, size_t idx, size_t plen, fat_fuse *ff, dir_t *dir, size_t dlen, dir_t *rval) {
+    assert(idx < plen && "error: get_dir index > length\n");
+    if(search_dirs(dir, dlen, plist[idx], rval)) {
+        return 1;
+    }
+    if(idx == 0 && idx == plen - 1) {
+        return 0;
+    }
+    return 0;
+}

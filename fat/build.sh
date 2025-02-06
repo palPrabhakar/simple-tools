@@ -1,4 +1,4 @@
 #!/usr/bin/bash
 
-gcc -Wall -D_FILE_OFFSET_BITS=64 main.c path.c `pkg-config fuse3 --cflags --libs` -o main
+gcc -Wall -D_FILE_OFFSET_BITS=64 main.c fat.c `pkg-config fuse3 --cflags --libs` -o main
 
