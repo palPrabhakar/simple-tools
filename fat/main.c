@@ -63,9 +63,7 @@ static void *fat_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
                   RootDirSectors);
     size_t clusterCount = DataSec / bpb.BPB_SecPerClus;
     if (clusterCount < 4085 || clusterCount > 65525) {
-        fprintf(
-            stderr,
-            "error: invalid cluster count ERROR_EXITfor fat16 filesystem\n");
+        fprintf(stderr, "error: invalid cluster count for fat16 filesystem\n");
         goto set_err;
     }
 
@@ -81,12 +79,15 @@ static void *fat_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
 
     ff->fat_sec = FATStartSector;
     ff->fat_sec_off = FATSectorOffset;
-    ff->root_dir = RootDirStartSector;
     ff->root_dir_off = RootDirOffset;
     ff->root_dir_ent = bpb.BPB_RootEntCnt;
     ff->first_data_sec = FirstDataSector;
     ff->sec_per_clus = bpb.BPB_SecPerClus;
     ff->bytes_per_sec = bpb.BPB_BytsPerSec;
+    if (!read_root_dir(&ff)) {
+        fprintf(stderr, "error: failed to read root dir sectors\n");
+        goto set_err;
+    }
 
 exit:
     return ff;
@@ -117,9 +118,7 @@ static int fat_getattr(const char *path, struct stat *stbuf,
         stbuf->st_nlink = 2;
     } else if (count == 2) {
         fat_fuse *ff = fuse_get_context()->private_data;
-        fseek(ff->fp, ff->root_dir_off, SEEK_SET);
-        dir_t *dir = malloc(sizeof(dir_t) * ff->root_dir_ent);
-        fread(dir, sizeof(dir_t), ff->root_dir_ent, ff->fp);
+        dir_t *dir = ff->root_dir;
         res = -ENOENT;
         for (size_t i = 0;
              i < ff->root_dir_ent && (uint8_t)dir[i].DIR_Name[0] != 0x00; ++i) {
@@ -150,7 +149,6 @@ static int fat_getattr(const char *path, struct stat *stbuf,
                 }
             }
         }
-        free(dir);
     } else {
         stbuf->st_mode = S_IFREG | 0444;
         stbuf->st_nlink = 1;
@@ -187,9 +185,7 @@ static int fat_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     fat_fuse *ff = fuse_get_context()->private_data;
 
     if (count == 1) {
-        fseek(ff->fp, ff->root_dir_off, SEEK_SET);
-        dir_t *dir = malloc(sizeof(dir_t) * ff->root_dir_ent);
-        fread(dir, sizeof(dir_t), ff->root_dir_ent, ff->fp);
+        dir_t *dir = ff->root_dir;
         for (size_t i = 0;
              i < ff->root_dir_ent && (uint8_t)dir[i].DIR_Name[0] != 0x00; ++i) {
             if ((uint8_t)dir[i].DIR_Name[0] != 0xE5) {
@@ -206,7 +202,6 @@ static int fat_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                 filler(buf, name, NULL, 0, FUSE_FILL_DIR_PLUS);
             }
         }
-        free(dir);
     } else {
         // TODO
     }
@@ -229,9 +224,7 @@ static int fat_open(const char *path, struct fuse_file_info *fi) {
         res = -ENOENT;
     } else if (count == 2) {
         fat_fuse *ff = fuse_get_context()->private_data;
-        fseek(ff->fp, ff->root_dir_off, SEEK_SET);
-        dir_t *dir = malloc(sizeof(dir_t) * ff->root_dir_ent);
-        fread(dir, sizeof(dir_t), ff->root_dir_ent, ff->fp);
+        dir_t *dir = ff->root_dir;
         res = -ENOENT;
         for (size_t i = 0;
              i < ff->root_dir_ent && (uint8_t)dir[i].DIR_Name[0] != 0x00; ++i) {
@@ -257,7 +250,6 @@ static int fat_open(const char *path, struct fuse_file_info *fi) {
                 }
             }
         }
-        free(dir);
     } else {
         // TODO:
     }
@@ -281,11 +273,11 @@ static int fat_read(const char *path, char *buf, size_t size, off_t offset,
     return bytes_read;
 }
 
-static int fat_write(const char *path, const char *buf, size_t size,
-                     off_t offset, struct fuse_file_info *fi) {
-    printf("fat_write path: %s\n", path);
-    return 0;
-}
+// static int fat_write(const char *path, const char *buf, size_t size,
+//                      off_t offset, struct fuse_file_info *fi) {
+//     printf("fat_write path: %s\n", path);
+//     return 0;
+// }
 
 static void fat_destroy(void *data) {
     printf("fat_destroy\n");
@@ -294,7 +286,8 @@ static void fat_destroy(void *data) {
         fat_fuse *ff = (fat_fuse *)data;
         if (ff->fp)
             fclose(ff->fp);
-
+        if (ff->root_dir)
+            free(ff->root_dir);
         free(ff);
     }
 }
@@ -306,7 +299,7 @@ static const struct fuse_operations fat_operations = {
     .readdir = fat_readdir,
     .open = fat_open,
     .read = fat_read,
-    .write = fat_write,
+    // .write = fat_write,
     .destroy = fat_destroy
 };
 // clang-format on

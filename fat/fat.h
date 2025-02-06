@@ -4,18 +4,6 @@
 #include <stdint.h>
 #include <stdio.h>
 
-typedef struct fat_fuse {
-    FILE *fp;
-    unsigned int fat_sec;
-    unsigned int fat_sec_off;
-    unsigned int root_dir;
-    unsigned int root_dir_off;
-    size_t root_dir_ent;
-    unsigned int first_data_sec;
-    size_t sec_per_clus;
-    size_t bytes_per_sec;
-} fat_fuse;
-
 #define FAT16
 
 #define cprintf(format, ...) printf(format, __VA_ARGS__);
@@ -60,6 +48,19 @@ typedef struct {
     uint32_t DIR_FileSize;
 } __attribute__((__packed__)) dir_t;
 
-char **parse_path(const char *, size_t *);
+typedef struct fat_fuse {
+    FILE *fp;
+    unsigned int fat_sec;
+    unsigned int fat_sec_off;
+    unsigned int root_dir_off;
+    size_t root_dir_ent;
+    unsigned int first_data_sec;
+    size_t sec_per_clus;
+    size_t bytes_per_sec;
+    dir_t *root_dir;
+} fat_fuse;
+
+char **parse_path(char *, size_t *);
+int read_root_dir(fat_fuse **ff);
 
 #endif
