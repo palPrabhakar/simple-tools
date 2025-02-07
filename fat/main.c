@@ -5,6 +5,7 @@
 
 #define _FILE_OFFSET_BITS 64
 
+#include <assert.h>
 #include <errno.h>
 #include <fuse.h>
 #include <stddef.h>
@@ -84,7 +85,7 @@ static void *fat_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
     ff->first_data_sec = FirstDataSector;
     ff->sec_per_clus = bpb.BPB_SecPerClus;
     ff->bytes_per_sec = bpb.BPB_BytsPerSec;
-    if (!read_root_dir(&ff)) {
+    if (read_dir(ff->fp, ff->root_dir_off, ff->root_dir_ent, &(ff->root_dir))) {
         fprintf(stderr, "error: failed to read root dir sectors\n");
         goto set_err;
     }
@@ -116,16 +117,14 @@ static int fat_getattr(const char *path, struct stat *stbuf,
     if (count == 1) {
         stbuf->st_mode = S_IFDIR | 0755;
         stbuf->st_nlink = 2;
-    } else if (count == 2) {
+    } else {
         fat_fuse *ff = fuse_get_context()->private_data;
-
         dir_t dir;
         if (get_dir(plist, 0, count - 1, ff, ff->root_dir, ff->root_dir_ent,
                     &dir)) {
             res = -ENOENT;
             goto exit;
         }
-
         if (dir.DIR_Attr == 0x10) {
             stbuf->st_mode = S_IFDIR | 0755;
             stbuf->st_nlink = 2;
@@ -134,15 +133,31 @@ static int fat_getattr(const char *path, struct stat *stbuf,
             stbuf->st_nlink = 1;
             stbuf->st_size = dir.DIR_FileSize;
         }
-    } else {
-        stbuf->st_mode = S_IFREG | 0444;
-        stbuf->st_nlink = 1;
     }
 
 exit:
     free(fpath);
     free(plist);
     return res;
+}
+
+static void fill_directories(dir_t *dir, size_t len, void *buf,
+                             fuse_fill_dir_t filler) {
+    for (size_t i = 0; i < len && (uint8_t)dir[i].DIR_Name[0] != 0x00; ++i) {
+        if ((uint8_t)dir[i].DIR_Name[0] != 0xE5) {
+            char name[12] = {'\0'};
+            size_t j;
+            for (j = 0; j < 8 && dir[i].DIR_Name[j] != ' '; ++j)
+                name[j] = dir[i].DIR_Name[j];
+            if (dir[i].DIR_Attr != 0x10) {
+                name[j++] = '.';
+                for (int k = 8; k < 11 && dir[i].DIR_Name[k] != ' '; ++k) {
+                    name[j++] = dir[i].DIR_Name[k];
+                }
+            }
+            filler(buf, name, NULL, 0, FUSE_FILL_DIR_PLUS);
+        }
+    }
 }
 
 static int fat_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
@@ -167,24 +182,23 @@ static int fat_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
     if (count == 1) {
         dir_t *dir = ff->root_dir;
-        for (size_t i = 0;
-             i < ff->root_dir_ent && (uint8_t)dir[i].DIR_Name[0] != 0x00; ++i) {
-            if ((uint8_t)dir[i].DIR_Name[0] != 0xE5) {
-                char name[12] = {'\0'};
-                size_t j;
-                for (j = 0; j < 8 && dir[i].DIR_Name[j] != ' '; ++j)
-                    name[j] = dir[i].DIR_Name[j];
-                if (dir[i].DIR_Attr != 0x10) {
-                    name[j++] = '.';
-                    for (int k = 8; k < 11 && dir[i].DIR_Name[k] != ' '; ++k) {
-                        name[j++] = dir[i].DIR_Name[k];
-                    }
-                }
-                filler(buf, name, NULL, 0, FUSE_FILL_DIR_PLUS);
-            }
-        }
+        fill_directories(dir, ff->root_dir_ent, buf, filler);
     } else {
-        // TODO
+        dir_t dir;
+        if (get_dir(plist, 0, count - 1, ff, ff->root_dir, ff->root_dir_ent,
+                    &dir)) {
+            res = -ENOENT;
+            goto exit;
+        }
+        dir_t *dirs;
+        // TODO:
+        // Extend support for reading sub-directories that span more than one
+        // sector!
+        if (read_dir(ff->fp, GET_SECTOR_OFFSET(dir, ff), 512, &dirs)) {
+            res = -ENOENT;
+            goto exit;
+        }
+        fill_directories(dirs, 512, buf, filler);
     }
 
 exit:
@@ -203,22 +217,19 @@ static int fat_open(const char *path, struct fuse_file_info *fi) {
 
     if (count == 1) {
         res = -ENOENT;
-    } else if (count == 2) {
+    } else {
         fat_fuse *ff = fuse_get_context()->private_data;
 
         dir_t dir;
         if (get_dir(plist, 0, count - 1, ff, ff->root_dir, ff->root_dir_ent,
                     &dir)) {
             res = -ENOENT;
+            goto exit;
         }
-
-        fi->fh =
-            ((dir.DIR_FstClusLO - 2) * ff->sec_per_clus + ff->first_data_sec) *
-            ff->bytes_per_sec;
-    } else {
-        // TODO:
+        fi->fh = GET_SECTOR_OFFSET(dir, ff);
     }
 
+exit:
     free(fpath);
     free(plist);
     return res;
@@ -229,6 +240,8 @@ static int fat_read(const char *path, char *buf, size_t size, off_t offset,
     printf("fat_read path: %s\n", path);
     (void)path;
 
+    // TODO:
+    // Support for files larger than one sector
     fat_fuse *ff = fuse_get_context()->private_data;
     fseek(ff->fp, fi->fh + offset, SEEK_SET);
     int bytes_read = fread(buf, sizeof(char), size, ff->fp);

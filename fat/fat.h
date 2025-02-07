@@ -60,8 +60,11 @@ typedef struct fat_fuse {
     dir_t *root_dir;
 } fat_fuse;
 
-char **parse_path(char *, size_t *);
-int read_root_dir(fat_fuse **);
-int get_dir(char **, size_t, size_t, fat_fuse *, dir_t *, size_t, dir_t *);
+#define GET_SECTOR_OFFSET(dir, ff)                                             \
+    ((((dir.DIR_FstClusLO - 2) * ff->sec_per_clus) + ff->first_data_sec) *     \
+     ff->bytes_per_sec)
 
+char **parse_path(char *, size_t *);
+int read_dir(FILE *, size_t, size_t, dir_t **);
+int get_dir(char **, size_t, size_t, fat_fuse *, dir_t *, size_t, dir_t *);
 #endif

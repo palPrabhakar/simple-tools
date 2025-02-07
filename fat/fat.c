@@ -1,22 +1,20 @@
 #include "fat.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 static const size_t increment_factor = 10;
 
-int read_root_dir(fat_fuse **ff) {
-    fseek((*ff)->fp, (*ff)->root_dir_off, SEEK_SET);
-    dir_t *dir = malloc(sizeof(dir_t) * (*ff)->root_dir_ent);
-    size_t read = fread(dir, sizeof(dir_t), (*ff)->root_dir_ent, (*ff)->fp);
-    if (read != (*ff)->root_dir_ent) {
-        printf("read: %lu", read);
-        free(dir);
-        return 0;
+int read_dir(FILE *fp, size_t offset, size_t n_entries, dir_t **dir) {
+    fseek(fp, offset, SEEK_SET);
+    *dir = malloc(sizeof(dir_t) * n_entries);
+    size_t read = fread(*dir, sizeof(dir_t), n_entries, fp);
+    if (read != n_entries) {
+        free(*dir);
+        return 1;
     }
-    (*ff)->root_dir = dir;
-    return read;
+    return 0;
 }
 
 char **parse_path(char *path, size_t *count) {
@@ -50,8 +48,7 @@ char **parse_path(char *path, size_t *count) {
 }
 
 static int search_dirs(dir_t *dir, int len, const char *dname, dir_t *rval) {
-    for (size_t i = 0;
-         i < len && (uint8_t)dir[i].DIR_Name[0] != 0x00; ++i) {
+    for (size_t i = 0; i < len && (uint8_t)dir[i].DIR_Name[0] != 0x00; ++i) {
         if ((uint8_t)dir[i].DIR_Name[0] != 0xE5) {
             char name[12] = {'\0'};
             size_t j;
@@ -72,13 +69,29 @@ static int search_dirs(dir_t *dir, int len, const char *dname, dir_t *rval) {
     return 1;
 }
 
-int get_dir(char **plist, size_t idx, size_t plen, fat_fuse *ff, dir_t *dir, size_t dlen, dir_t *rval) {
+int get_dir(char **plist, size_t idx, size_t plen, fat_fuse *ff, dir_t *dir,
+            size_t dlen, dir_t *rval) {
     assert(idx < plen && "error: get_dir index > length\n");
-    if(search_dirs(dir, dlen, plist[idx], rval)) {
+    if (search_dirs(dir, dlen, plist[idx], rval)) {
         return 1;
     }
-    if(idx == 0 && idx == plen - 1) {
+
+    if (idx == 0 && idx == plen - 1) {
         return 0;
     }
-    return 0;
+
+    if (idx == plen - 1) {
+        free(dir);
+        return 0;
+    }
+
+    if (idx != 0) {
+        free(dir);
+    }
+
+    if (read_dir(ff->fp, GET_SECTOR_OFFSET((*rval), ff), 512, &dir)) {
+        return 1;
+    }
+
+    return get_dir(plist, idx + 1, plen, ff, dir, 512, rval);
 }
