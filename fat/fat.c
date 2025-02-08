@@ -6,15 +6,6 @@
 
 static const size_t increment_factor = 10;
 
-static size_t get_next_cluster(fat_fuse *ff, size_t cluster) {
-    assert(cluster > 0x0001 && "error: invalid cluster number");
-    if (ff->fat_dir[cluster] == 0xFFF7 || ff->fat_dir[cluster] == 0x0000 ||
-        ff->fat_dir[cluster] == 0x0001) {
-        return 0xFFFF;
-    }
-    return ff->fat_dir[cluster];
-}
-
 static int get_num_clusters(fat_fuse *ff, size_t cluster) {
     assert(cluster > 0x0001 && "error: invalid cluster number");
     size_t n_clusters = 1;
@@ -27,6 +18,15 @@ static int get_num_clusters(fat_fuse *ff, size_t cluster) {
         return 0;
     }
     return n_clusters;
+}
+
+size_t get_next_cluster(fat_fuse *ff, size_t cluster) {
+    assert(cluster > 0x0001 && "error: invalid cluster number");
+    if (ff->fat_dir[cluster] == 0xFFF7 || ff->fat_dir[cluster] == 0x0000 ||
+        ff->fat_dir[cluster] == 0x0001) {
+        return 0xFFFF;
+    }
+    return ff->fat_dir[cluster];
 }
 
 int read_dir(FILE *fp, size_t offset, size_t n_entries, dir_t *dir) {

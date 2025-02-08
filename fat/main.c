@@ -231,7 +231,7 @@ static int fat_open(const char *path, struct fuse_file_info *fi) {
             res = -ENOENT;
             goto exit;
         }
-        fi->fh = GET_SECTOR_OFFSET(dir.DIR_FstClusLO, ff);
+        fi->fh = dir.DIR_FstClusLO;
     }
 
 exit:
@@ -242,18 +242,38 @@ exit:
 
 static int fat_read(const char *path, char *buf, size_t size, off_t offset,
                     struct fuse_file_info *fi) {
-    printf("fat_read path: %s\n", path);
+    printf("fat_read path: %s, ", path);
+    printf("size: %lu, ", size);
+    printf("off_t: %lu\n", offset);
     (void)path;
 
-    // TODO:
-    // Support for files larger than one sector
-    fat_fuse *ff = fuse_get_context()->private_data;
-    fseek(ff->fp, fi->fh + offset, SEEK_SET);
-    int bytes_read = fread(buf, sizeof(char), size, ff->fp);
-    if (bytes_read == 0)
-        return -errno;
+    if (offset != 0) {
+        fprintf(stderr, "TODO: Implement support for non-zero offset\n");
+        return -EPERM;
+    }
 
-    return bytes_read;
+    fat_fuse *ff = fuse_get_context()->private_data;
+    const size_t cluster_size = ff->bytes_per_sec * ff->sec_per_clus;
+    printf("cluster_size: %lu\n", cluster_size);
+    size_t cluster = fi->fh;
+    size_t remaining = size;
+    while (remaining > 0 && VALID_CLUSTER(cluster)) {
+        printf("remaining: %lu, ", remaining);
+        printf("cluster: %lu, ", cluster);
+        fseek(ff->fp, GET_SECTOR_OFFSET(cluster, ff), SEEK_SET);
+        size_t bytes_to_read =
+            cluster_size < remaining ? cluster_size : remaining;
+        printf("bytes_to_read: %lu\n", bytes_to_read);
+        if (fread(buf, sizeof(char), bytes_to_read, ff->fp) != bytes_to_read) {
+            fprintf(stderr, "error: reading file: %s\n", path);
+            return -errno;
+        }
+        buf += bytes_to_read;
+        remaining -= bytes_to_read;
+        cluster = get_next_cluster(ff, cluster);
+    }
+
+    return size - remaining;
 }
 
 // static int fat_write(const char *path, const char *buf, size_t size,

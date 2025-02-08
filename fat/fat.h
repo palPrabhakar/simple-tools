@@ -63,8 +63,11 @@ typedef struct fat_fuse {
     ((((cluster - 2) * ff->sec_per_clus) + ff->first_data_sec) *               \
      ff->bytes_per_sec)
 
+#define VALID_CLUSTER(x) ((x > 0x0001) && (x < 0xFFF7))
+
 char **parse_path(char *, size_t *);
 int read_dir(FILE *, size_t, size_t, dir_t *);
 int get_dir(char **, size_t, size_t, fat_fuse *, dir_t *, size_t, dir_t *);
 int read_dir_entries(fat_fuse *, dir_t, dir_t **, size_t *);
+size_t get_next_cluster(fat_fuse *, size_t);
 #endif
