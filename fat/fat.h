@@ -59,12 +59,12 @@ typedef struct fat_fuse {
     size_t fat_ent;
 } fat_fuse;
 
-#define GET_SECTOR_OFFSET(dir, ff)                                             \
-    ((((dir.DIR_FstClusLO - 2) * ff->sec_per_clus) + ff->first_data_sec) *     \
+#define GET_SECTOR_OFFSET(cluster, ff)                                         \
+    ((((cluster - 2) * ff->sec_per_clus) + ff->first_data_sec) *               \
      ff->bytes_per_sec)
 
 char **parse_path(char *, size_t *);
-int read_dir(FILE *, size_t, size_t, dir_t **);
+int read_dir(FILE *, size_t, size_t, dir_t *);
 int get_dir(char **, size_t, size_t, fat_fuse *, dir_t *, size_t, dir_t *);
-int get_dir_entries(fat_fuse *, size_t, size_t *);
+int read_dir_entries(fat_fuse *, dir_t, dir_t **, size_t *);
 #endif

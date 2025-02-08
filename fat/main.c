@@ -82,7 +82,8 @@ static void *fat_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
     ff->first_data_sec = FirstDataSector;
     ff->sec_per_clus = bpb.BPB_SecPerClus;
     ff->bytes_per_sec = bpb.BPB_BytsPerSec;
-    if (read_dir(ff->fp, RootDirOffset, ff->root_dir_ent, &(ff->root_dir))) {
+    ff->root_dir = malloc(ff->root_dir_ent * sizeof(dir_t));
+    if (read_dir(ff->fp, RootDirOffset, ff->root_dir_ent, ff->root_dir)) {
         fprintf(stderr, "error: failed to read root dir sectors\n");
         goto set_err;
     }
@@ -198,12 +199,11 @@ static int fat_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         }
         dir_t *dirs = NULL;
         size_t n_entries;
-        if (get_dir_entries(ff, dir.DIR_FstClusLO, &n_entries) ||
-            read_dir(ff->fp, GET_SECTOR_OFFSET(dir, ff), n_entries, &dirs)) {
-            res = -ENOENT;
-            goto exit;
+        if (read_dir_entries(ff, dir, &dirs, &n_entries)) {
+            return 1;
         }
-        fill_directories(dirs, 512, buf, filler);
+        fill_directories(dirs, n_entries, buf, filler);
+        free(dirs);
     }
 
 exit:
@@ -231,7 +231,7 @@ static int fat_open(const char *path, struct fuse_file_info *fi) {
             res = -ENOENT;
             goto exit;
         }
-        fi->fh = GET_SECTOR_OFFSET(dir, ff);
+        fi->fh = GET_SECTOR_OFFSET(dir.DIR_FstClusLO, ff);
     }
 
 exit:
