@@ -50,14 +50,13 @@ typedef struct {
 
 typedef struct fat_fuse {
     FILE *fp;
-    unsigned int fat_sec;
-    unsigned int fat_sec_off;
-    unsigned int root_dir_off;
     size_t root_dir_ent;
     unsigned int first_data_sec;
     size_t sec_per_clus;
     size_t bytes_per_sec;
     dir_t *root_dir;
+    uint16_t *fat_dir;
+    size_t fat_ent;
 } fat_fuse;
 
 #define GET_SECTOR_OFFSET(dir, ff)                                             \

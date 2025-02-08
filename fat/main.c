@@ -78,15 +78,21 @@ static void *fat_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
                                (bpb.BPB_NumFATs * bpb.BPB_FATSz16) +
                                RootDirSectors;
 
-    ff->fat_sec = FATStartSector;
-    ff->fat_sec_off = FATSectorOffset;
-    ff->root_dir_off = RootDirOffset;
     ff->root_dir_ent = bpb.BPB_RootEntCnt;
     ff->first_data_sec = FirstDataSector;
     ff->sec_per_clus = bpb.BPB_SecPerClus;
     ff->bytes_per_sec = bpb.BPB_BytsPerSec;
-    if (read_dir(ff->fp, ff->root_dir_off, ff->root_dir_ent, &(ff->root_dir))) {
+    if (read_dir(ff->fp, RootDirOffset, ff->root_dir_ent, &(ff->root_dir))) {
         fprintf(stderr, "error: failed to read root dir sectors\n");
+        goto set_err;
+    }
+
+    ff->fat_dir = malloc(bpb.BPB_FATSz16 * bpb.BPB_BytsPerSec);
+    ff->fat_ent = bpb.BPB_FATSz16 * bpb.BPB_BytsPerSec / sizeof(uint16_t);
+    fseek(ff->fp, FATSectorOffset, SEEK_SET);
+    if (fread(ff->fat_dir, sizeof(uint16_t), ff->fat_ent, ff->fp) !=
+        ff->fat_ent) {
+        fprintf(stderr, "error: failed to read fat sectors\n");
         goto set_err;
     }
 
@@ -266,6 +272,8 @@ static void fat_destroy(void *data) {
             fclose(ff->fp);
         if (ff->root_dir)
             free(ff->root_dir);
+        if (ff->fat_dir)
+            free(ff->fat_dir);
         free(ff);
     }
 }
