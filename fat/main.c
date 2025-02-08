@@ -196,11 +196,10 @@ static int fat_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
             res = -ENOENT;
             goto exit;
         }
-        dir_t *dirs;
-        // TODO:
-        // Extend support for reading sub-directories that span more than one
-        // sector!
-        if (read_dir(ff->fp, GET_SECTOR_OFFSET(dir, ff), 512, &dirs)) {
+        dir_t *dirs = NULL;
+        size_t n_entries;
+        if (get_dir_entries(ff, dir.DIR_FstClusLO, &n_entries) ||
+            read_dir(ff->fp, GET_SECTOR_OFFSET(dir, ff), n_entries, &dirs)) {
             res = -ENOENT;
             goto exit;
         }

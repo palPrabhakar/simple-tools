@@ -69,6 +69,22 @@ static int search_dirs(dir_t *dir, int len, const char *dname, dir_t *rval) {
     return 1;
 }
 
+int get_dir_entries(fat_fuse *ff, size_t cluster, size_t *n_entries) {
+    assert(cluster > 0x0001 && "error: invalid cluster number");
+    size_t n_clusters = 1;
+    size_t cur = cluster;
+    while (ff->fat_dir[cur] < 0xFFF7 && ff->fat_dir[cur] != 0x0000) {
+        ++n_clusters;
+        cur = ff->fat_dir[cur];
+    }
+    if (ff->fat_dir[cur] == 0xFFF7 || ff->fat_dir[cur] == 0x0000) {
+        return 1;
+    }
+    *n_entries =
+        (n_clusters * ff->sec_per_clus * ff->bytes_per_sec) / sizeof(dir_t);
+    return 0;
+}
+
 int get_dir(char **plist, size_t idx, size_t plen, fat_fuse *ff, dir_t *dir,
             size_t dlen, dir_t *rval) {
     assert(idx < plen && "error: get_dir index > length\n");
@@ -89,7 +105,9 @@ int get_dir(char **plist, size_t idx, size_t plen, fat_fuse *ff, dir_t *dir,
         free(dir);
     }
 
-    if (read_dir(ff->fp, GET_SECTOR_OFFSET((*rval), ff), 512, &dir)) {
+    size_t n_entries;
+    if (get_dir_entries(ff, (*rval).DIR_FstClusLO, &n_entries) ||
+        read_dir(ff->fp, GET_SECTOR_OFFSET((*rval), ff), 512, &dir)) {
         return 1;
     }
 

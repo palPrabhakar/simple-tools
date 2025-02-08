@@ -66,4 +66,5 @@ typedef struct fat_fuse {
 char **parse_path(char *, size_t *);
 int read_dir(FILE *, size_t, size_t, dir_t **);
 int get_dir(char **, size_t, size_t, fat_fuse *, dir_t *, size_t, dir_t *);
+int get_dir_entries(fat_fuse *, size_t, size_t *);
 #endif
