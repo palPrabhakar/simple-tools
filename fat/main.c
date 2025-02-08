@@ -17,7 +17,7 @@
 
 // command-line options
 static struct options {
-    const char *filename;
+    char *filename;
     int help;
 } options;
 
@@ -39,8 +39,6 @@ static void show_help(const char *program) {
 }
 
 static void *fat_init(struct fuse_conn_info *conn, struct fuse_config *cfg) {
-    printf("fat_init\n");
-
     fat_fuse *ff = malloc(sizeof(fat_fuse));
 
     ff->fp = fopen(options.filename, "rb");
@@ -107,8 +105,6 @@ set_err:
 
 static int fat_getattr(const char *path, struct stat *stbuf,
                        struct fuse_file_info *fi) {
-    printf("fat_getattr path: %s\n", path);
-
     (void)fi;
     int res = 0;
 
@@ -170,7 +166,6 @@ static void fill_directories(dir_t *dir, size_t len, void *buf,
 static int fat_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                        off_t offset, struct fuse_file_info *fi,
                        enum fuse_readdir_flags flags) {
-    printf("fat_readdir path: %s\n", path);
     (void)offset;
     (void)fi;
     (void)flags;
@@ -213,8 +208,6 @@ exit:
 }
 
 static int fat_open(const char *path, struct fuse_file_info *fi) {
-    printf("fat_open path: %s\n", path);
-
     int res = 0;
     char *fpath = strdup(path);
     size_t count = 0;
@@ -242,9 +235,6 @@ exit:
 
 static int fat_read(const char *path, char *buf, size_t size, off_t offset,
                     struct fuse_file_info *fi) {
-    printf("fat_read path: %s, ", path);
-    printf("size: %lu, ", size);
-    printf("off_t: %lu\n", offset);
     (void)path;
 
     if (offset != 0) {
@@ -254,16 +244,12 @@ static int fat_read(const char *path, char *buf, size_t size, off_t offset,
 
     fat_fuse *ff = fuse_get_context()->private_data;
     const size_t cluster_size = ff->bytes_per_sec * ff->sec_per_clus;
-    printf("cluster_size: %lu\n", cluster_size);
     size_t cluster = fi->fh;
     size_t remaining = size;
     while (remaining > 0 && VALID_CLUSTER(cluster)) {
-        printf("remaining: %lu, ", remaining);
-        printf("cluster: %lu, ", cluster);
         fseek(ff->fp, GET_SECTOR_OFFSET(cluster, ff), SEEK_SET);
         size_t bytes_to_read =
             cluster_size < remaining ? cluster_size : remaining;
-        printf("bytes_to_read: %lu\n", bytes_to_read);
         if (fread(buf, sizeof(char), bytes_to_read, ff->fp) != bytes_to_read) {
             fprintf(stderr, "error: reading file: %s\n", path);
             return -errno;
@@ -283,8 +269,6 @@ static int fat_read(const char *path, char *buf, size_t size, off_t offset,
 // }
 
 static void fat_destroy(void *data) {
-    printf("fat_destroy\n");
-
     if (data) {
         fat_fuse *ff = (fat_fuse *)data;
         if (ff->fp)
@@ -318,7 +302,7 @@ int main(int argc, char **argv) {
 
     char *devfile = realpath(options.filename, NULL);
     if (devfile) {
-        free((void *)options.filename);
+        free(options.filename);
         options.filename = devfile;
     } else {
         fprintf(stderr, "error: invalid filename specified\n");
@@ -338,6 +322,7 @@ int main(int argc, char **argv) {
     ret = fuse_main(args.argc, args.argv, &fat_operations, NULL);
 
 exit:
+    free(options.filename);
     fuse_opt_free_args(&args);
     return ret;
 }
