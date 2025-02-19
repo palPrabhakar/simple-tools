@@ -8,14 +8,21 @@ from tkinter import ttk
 
 
 class Instruction:
-    def __init_(self, instr, dest, src0, src1):
+    def __init__(self, instr, operands):
         self.instr = instr
-        self.dest = dest
-        self.src0 = src0
-        self.src1 = src1
+        self.dest = operands[0]
+        self.src0 = operands[1]
+        self.src1 = operands[2]
 
     def __str__(self):
-        return f"{self.instr} {self.dest}, {self.src0}, {self.src1}"
+        if not self.src1:
+            return f"{self.instr} {self.dest}, {self.src0}\n"
+        elif not self.src0:
+            return f"{self.instr} {self.dest}\n"
+        elif not self.dest:
+            return f"{self.instr}\n"
+        else:
+            return f"{self.instr} {self.dest}, {self.src0}, {self.src1}\n"
 
 
 class Function:
@@ -28,7 +35,10 @@ class Function:
 
 
 def parse_instr(instr):
-    return instr
+    name, operands = instr.split()
+    operands = [x.strip()
+                for x in operands.split(',')]
+    return Instruction(name, [*operands, None, None, None])
 
 
 def read_assembly(file_name):
@@ -52,10 +62,8 @@ def main():
     root.rowconfigure(0, weight=1)
 
     for i, inst in enumerate(function.instrs):
-        tk.Label(mainframe, text=inst, font=("JetBrains Mono", 15)).grid(column=0, row=i+1)
-
-    for child in mainframe.winfo_children():
-        child.grid_configure(padx=5, pady=5)
+        tk.Label(mainframe, text=inst, font=(
+            "JetBrains Mono", 15)).grid(column=0, row=i+1)
 
     root.mainloop()
 
