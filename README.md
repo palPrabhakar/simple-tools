@@ -1,2 +1,3 @@
-# simple-stack-tracer
-Print the C/C++ stack trace
+# simple-tools
+
+Tools to help with random developement tasks.
