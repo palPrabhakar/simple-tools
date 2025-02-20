@@ -38,22 +38,25 @@ class Block:
 class Instruction:
     def __init__(self, instr, operands):
         self.instr = instr
-        self.dest = operands[0]
-        self.src0 = operands[1]
-        self.src1 = operands[2]
+        self.op0 = operands[0]
+        self.op1 = operands[1]
+        self.op2 = operands[2]
+        self.defs = []
+        self.uses = []
+        self.idx = 0
 
     def set_block(self, block):
         self.block = block
 
     def __str__(self):
-        if not self.dest:
+        if not self.op0:
             return f"{self.instr}"
-        elif not self.src0:
-            return f"{self.instr} {self.dest}"
-        elif not self.src1:
-            return f"{self.instr} {self.dest}, {self.src0}"
+        elif not self.op1:
+            return f"{self.instr} {self.op0}"
+        elif not self.op2:
+            return f"{self.instr} {self.op0}, {self.op1}"
         else:
-            return f"{self.instr} {self.dest}, {self.src0}, {self.src1}"
+            return f"{self.instr} {self.op0}, {self.op1}, {self.op2}"
 
 
 class Function:
@@ -61,7 +64,8 @@ class Function:
         self.name = name
         self.instrs = instrs
         self.bb = get_bb(self.instrs)
-        self.cfg = build_cfg(self.bb)
+        build_cfg(self.bb)
+        build_uses_and_defs(self.bb)
 
     def print_cfg(self):
         for b in self.bb:
@@ -70,6 +74,29 @@ class Function:
     def __str__(self):
         instrs = '\n\t'.join(map(str, self.instrs))
         return f"{self.name}\n\t{instrs}"
+
+
+def find_uses(i, instr):
+    for idx in range(i+1, len(instr)):
+        if instr[idx].op0 == instr[i].op0:
+            return
+
+        if instr[idx].instr in {"sd", "mv", "sw", "lw", "sext.w", "ld"}:
+            if instr[i].op0 in instr[idx].op1:
+                instr[i].uses.append(instr[idx])
+                instr[idx].defs.append(instr[i])
+
+        if instr[idx].instr in {"addi", "mulw"}:
+            if instr[i].op0 in instr[idx].op1 or instr[i].op0 in instr[idx].op2:
+                instr[i].uses.append(instr[idx])
+                instr[idx].defs.append(instr[i])
+
+
+def build_uses_and_defs(bb):
+    for b in bb:
+        for i, ins in enumerate(b.instrs):
+            if ins.instr in {"addi", "mv", "sw", "lw", "mulw", "sext.w", "ld"}:
+                find_uses(i, b.instrs)
 
 
 def build_cfg(bb):
@@ -84,7 +111,7 @@ def build_cfg(bb):
 
     for i, block in enumerate(bb):
         if block.instrs[-1].instr in conditional_jumps_riscv:
-            insert_nodes(block, bb[imap[block.instrs[-1].src1]
+            insert_nodes(block, bb[imap[block.instrs[-1].op2]
                                    ])
             assert not i == (len(bb) - 1), "build cfg: conditional_jumps_riscv"
             insert_nodes(block, bb[i+1])
@@ -93,7 +120,7 @@ def build_cfg(bb):
                 assert not i == (len(bb) - 1), "build cfg: call instr"
                 insert_nodes(block, bb[i+1])
             elif block.instrs[-1].instr == 'j':
-                insert_nodes(block, bb[imap[block.instrs[-1].dest]
+                insert_nodes(block, bb[imap[block.instrs[-1].op0]
                                        ])
         else:
             assert not i == (len(bb) - 1), "build cfg: instr"
@@ -105,13 +132,16 @@ def get_bb(instrs):
     cblock = Block("entry")
 
     i = 0
+    idx = 0
     for ins in instrs:
+        ins.idx = idx
+        idx = idx + 1
         if ins.instr in block_terminators_riscv:
             cblock.append(ins)
             bblocks.append(cblock)
             cblock = Block(f"block{i}")
             i = i + 1
-        elif not ins.dest:
+        elif not ins.op0:
             if len(cblock.instrs) == 0:
                 cblock.name = ins.instr[:-1]
             else:
@@ -139,12 +169,22 @@ def read_assembly(file_name):
     return function
 
 
-def handle_click(event, tbox):
-    tbox.tag_remove("highlight", "1.0", "end")
-    index = tbox.index(f"@{event.x},{event.y}")
-    line_number = index.split(".")[0]
-    tbox.tag_add("highlight", f"{line_number}.0", f"{line_number}.end")
-    tbox.tag_config("highlight", background="yellow")
+def handle_click(event, tbox, func):
+    tbox.tag_remove("h0", "1.0", "end")
+    tbox.tag_remove("h1", "1.0", "end")
+    tbox.tag_remove("h2", "1.0", "end")
+    ln = tbox.index(f"@{event.x},{event.y}").split(".")[0]
+
+    tbox.tag_add("h1", f"{ln}.0", f"{ln}.end")
+    tbox.tag_config("h1", background="lightblue")
+
+    for ins in func.instrs[int(ln)-1].defs:
+        tbox.tag_add("h0", f"{ins.idx + 1}.0", f"{ins.idx + 1}.end")
+    tbox.tag_config("h0", background="lightgreen")
+
+    for ins in func.instrs[int(ln)-1].uses:
+        tbox.tag_add("h2", f"{ins.idx + 1}.0", f"{ins.idx + 1}.end")
+    tbox.tag_config("h2", background="lightyellow")
 
 
 def show(function):
@@ -156,18 +196,16 @@ def show(function):
 
     text = tk.Text(frame, font=("JetBrains Mono", 14),  padx=10, pady=10)
     text.pack(fill="both", expand=True)
-
     for i, inst in enumerate(function.instrs):
         text.insert("end", f"{inst}\n")
-
-    text.bind("<Button-1>", lambda event: handle_click(event, text))
+    text.bind("<Button-1>", lambda event: handle_click(event, text, function))
 
     root.mainloop()
 
 
 def main():
     print("Def and Use")
-    function = read_assembly("risc-v2.asm")
+    function = read_assembly("risc-v.asm")
     show(function)
 
 
