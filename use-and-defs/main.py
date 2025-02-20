@@ -8,35 +8,31 @@ import tkinter as tk
 from tkinter import ttk
 
 
-block_terminators_riscv = {'jal', 'jalr', 'beq', 'bne', 'blt',
-                           'bge', 'bltu', 'bgeu', 'ret', 'call',
-                           'j', 'jr', 'ecall', 'ebreak', 'bgt',
-                           'ble', 'bgtu', 'bleu', 'beqz', 'bnez',
+conditional_jumps_riscv = {'beq', 'bne', 'blt', 'bge', 'bltu', 'bgeu',
+                           'bgt', 'ble', 'bgtu', 'bleu', 'beqz', 'bnez',
                            'bltz', 'bgez', 'bgtz', 'blez'}
 
+unconditional_jumps_riscv = {'jal', 'jalr',
+                             'ret' 'call', 'ecall', 'ebreak', 'j', 'jr'}
 
-def get_bb(instrs):
-    bblocks = []
-    cblock = []
+block_terminators_riscv = conditional_jumps_riscv | unconditional_jumps_riscv
 
-    for ins in instrs:
-        if ins.instr in block_terminators_riscv:
-            ins.set_block(cblock)
-            cblock.append(ins)
-            bblocks.append(cblock)
-            cblock = []
-        elif not ins.dest:
-            if len(cblock) == 0:
-                ins.set_block(cblock)
-                cblock.append(ins)
-            else:
-                bblocks.append(cblock)
-                cblock = [ins]
-        else:
-            ins.set_block(cblock)
-            cblock.append(ins)
 
-    return bblocks
+class Block:
+    def __init__(self, name):
+        self.name = name
+        self.pred = []
+        self.succ = []
+        self.instrs = []
+
+    def append(self, instr):
+        self.instrs.append(instr)
+        instr.set_block(self)
+
+    def __str__(self):
+        pred = ', '.join(map(lambda x: x.name, self.pred))
+        succ = ', '.join(map(lambda x: x.name, self.succ))
+        return f"{self.name}\n\tpred: {pred}\n\tsucc: {succ}"
 
 
 class Instruction:
@@ -65,9 +61,66 @@ class Function:
         self.name = name
         self.instrs = instrs
         self.bb = get_bb(self.instrs)
+        self.cfg = build_cfg(self.bb)
+
+    def print_cfg(self):
+        for b in self.bb:
+            print(b)
 
     def __str__(self):
-        return f"{self.name}"
+        instrs = '\n\t'.join(map(str, self.instrs))
+        return f"{self.name}\n\t{instrs}"
+
+
+def build_cfg(bb):
+    if len(bb) == 0:
+        exit(1)
+
+    def insert_nodes(src, dst):
+        src.succ.append(dst)
+        dst.pred.append(src)
+
+    imap = {x.name: i for i, x in enumerate(bb)}
+
+    for i, block in enumerate(bb):
+        if block.instrs[-1].instr in conditional_jumps_riscv:
+            insert_nodes(block, bb[imap[block.instrs[-1].src1]
+                                   ])
+            assert not i == (len(bb) - 1), "build cfg: conditional_jumps_riscv"
+            insert_nodes(block, bb[i+1])
+        elif block.instrs[-1].instr in unconditional_jumps_riscv:
+            if block.instrs[-1].instr == 'call':
+                assert not i == (len(bb) - 1), "build cfg: call instr"
+                insert_nodes(block, bb[i+1])
+            elif block.instrs[-1].instr == 'j':
+                insert_nodes(block, bb[imap[block.instrs[-1].dest]
+                                       ])
+        else:
+            assert not i == (len(bb) - 1), "build cfg: instr"
+            insert_nodes(block, bb[i+1])
+
+
+def get_bb(instrs):
+    bblocks = []
+    cblock = Block("entry")
+
+    i = 0
+    for ins in instrs:
+        if ins.instr in block_terminators_riscv:
+            cblock.append(ins)
+            bblocks.append(cblock)
+            cblock = Block(f"block{i}")
+            i = i + 1
+        elif not ins.dest:
+            if len(cblock.instrs) == 0:
+                cblock.name = ins.instr[:-1]
+            else:
+                bblocks.append(cblock)
+                cblock = Block(ins.instr[:-1])
+        else:
+            cblock.append(ins)
+
+    return bblocks
 
 
 def parse_instr(instr):
@@ -95,7 +148,6 @@ def handle_click(event, tbox):
 
 
 def show(function):
-
     root = tk.Tk()
     root.title(function.name)
 
