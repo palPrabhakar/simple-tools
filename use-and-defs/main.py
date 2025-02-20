@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 """
 Find the definition and usage of
 instructions source and destination
@@ -15,14 +16,14 @@ class Instruction:
         self.src1 = operands[2]
 
     def __str__(self):
-        if not self.src1:
-            return f"{self.instr} {self.dest}, {self.src0}\n"
+        if not self.dest:
+            return f"{self.instr}"
         elif not self.src0:
-            return f"{self.instr} {self.dest}\n"
-        elif not self.dest:
-            return f"{self.instr}\n"
+            return f"{self.instr} {self.dest}"
+        elif not self.src1:
+            return f"{self.instr} {self.dest}, {self.src0}"
         else:
-            return f"{self.instr} {self.dest}, {self.src0}, {self.src1}\n"
+            return f"{self.instr} {self.dest}, {self.src0}, {self.src1}"
 
 
 class Function:
@@ -49,23 +50,37 @@ def read_assembly(file_name):
     return function
 
 
-def main():
-    print("Def and Use")
-    function = read_assembly("risc-v.asm")
+def handle_click(event, tbox):
+    tbox.tag_remove("highlight", "1.0", "end")
+    index = tbox.index(f"@{event.x},{event.y}")
+    line_number = index.split(".")[0]
+    tbox.tag_add("highlight", f"{line_number}.0", f"{line_number}.end")
+    tbox.tag_config("highlight", background="yellow")
+
+
+def show(function):
 
     root = tk.Tk()
     root.title(function.name)
 
-    mainframe = ttk.Frame(root, padding="3 3 12 12")
-    mainframe.grid(column=0, row=0)
-    root.columnconfigure(0, weight=1)
-    root.rowconfigure(0, weight=1)
+    frame = ttk.Frame(root)
+    frame.pack(fill="both", expand=True)
+
+    text = tk.Text(frame, font=("JetBrains Mono", 14),  padx=10, pady=10)
+    text.pack(fill="both", expand=True)
 
     for i, inst in enumerate(function.instrs):
-        tk.Label(mainframe, text=inst, font=(
-            "JetBrains Mono", 15)).grid(column=0, row=i+1)
+        text.insert("end", f"{inst}\n")
+
+    text.bind("<Button-1>", lambda event: handle_click(event, text))
 
     root.mainloop()
+
+
+def main():
+    print("Def and Use")
+    function = read_assembly("risc-v.asm")
+    show(function)
 
 
 if __name__ == '__main__':
