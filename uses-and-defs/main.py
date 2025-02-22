@@ -104,7 +104,6 @@ def build_uses_and_defs(bb):
     for b in bb:
         for i, ins in enumerate(b.instrs):
             if ins.instr in {"addi", "mv", "sw", "lw", "andi", "mulw", "sext.w", "ld", "slliw"}:
-                print(ins.instr)
                 find_uses(ins, i+1, b, {})
 
 
@@ -183,33 +182,77 @@ def handle_click(event, tbox, func):
     tbox.tag_remove("h1", "1.0", "end")
     tbox.tag_remove("h2", "1.0", "end")
 
-    ln = tbox.index(f"@{event.x},{event.y}").split(".")[0]
-    if not int(ln) < len(func.instrs):
+    off = 2
+    ln = int(tbox.index(f"@{event.x},{event.y}").split(".")[0]) - off
+    if not ln < len(func.instrs):
         return
 
-    tbox.tag_add("h1", f"{ln}.0", f"{ln}.end")
+    tbox.tag_add("h1", f"{ln + off}.0", f"{ln + off}.end")
     tbox.tag_config("h1", background="lightblue")
 
-    for ins in func.instrs[int(ln)-1].defs:
-        tbox.tag_add("h0", f"{ins.idx + 1}.0", f"{ins.idx + 1}.end")
+    for ins in func.instrs[ln].defs:
+        tbox.tag_add("h0", f"{ins.idx + off}.0", f"{ins.idx + off}.end")
     tbox.tag_config("h0", background="lightgreen")
 
-    for ins in func.instrs[int(ln)-1].uses:
-        tbox.tag_add("h2", f"{ins.idx + 1}.0", f"{ins.idx + 1}.end")
+    for ins in func.instrs[ln].uses:
+        tbox.tag_add("h2", f"{ins.idx + off}.0", f"{ins.idx + off}.end")
     tbox.tag_config("h2", background="lightyellow")
 
 
 def show(function):
+    def format_operands(inst):
+        def format_operand(op):
+            try:
+                _ = int(op)
+                text.insert("end", f"{op}", "num")
+            except Exception:
+                if '(' in op and ')' in op:
+                    num, rest = op.split('(')
+                    reg, *_ = rest.split(')')
+                    text.insert("end", f"{num}", "num")
+                    text.insert("end", "(")
+                    text.insert("end", f"{reg}", "str")
+                    text.insert("end", ")")
+                else:
+                    text.insert("end", f"{op}", "str")
+
+        text.insert("end", f"\t{inst.instr}\t", "instr")
+        text.insert("end", f"{inst.op0}", "str")
+
+        if not inst.op1:
+            text.insert("end", "\n")
+            return
+
+        text.insert("end", ",")
+        format_operand(inst.op1)
+
+        if not inst.op2:
+            text.insert("end", "\n")
+            return
+
+        text.insert("end", ",")
+        format_operand(inst.op2)
+        text.insert("end", "\n")
+
     root = tk.Tk()
-    root.title(function.name)
+    root.title("Uses & Defs")
 
     frame = ttk.Frame(root)
     frame.pack(fill="both", expand=True)
 
     text = tk.Text(frame, font=("JetBrains Mono", 14),  padx=10, pady=10)
     text.pack(fill="both", expand=True)
+
+    text.tag_config("label", foreground="blue")
+    text.tag_config("instr", foreground="red")
+    text.tag_config("str", foreground="green")
+    text.tag_config("num", foreground="magenta")
+    text.insert("end", f"{function.name}:\n", "label")
     for i, inst in enumerate(function.instrs):
-        text.insert("end", f"{inst}\n")
+        if not inst.op0:
+            text.insert("end", f"{inst}\n", "label")
+        else:
+            format_operands(inst)
     text.bind("<Button-1>", lambda event: handle_click(event, text, function))
 
     root.mainloop()
@@ -218,7 +261,6 @@ def show(function):
 def main():
     print("Def and Use")
     function = read_assembly("risc-v2.asm")
-    function.print_cfg()
     show(function)
 
 
