@@ -4,6 +4,7 @@ Find the definition and usage of
 instructions source and destination
 """
 
+import argparse
 import tkinter as tk
 from tkinter import ttk
 
@@ -254,15 +255,19 @@ def show(function):
         else:
             format_operands(inst)
     text.bind("<Button-1>", lambda event: handle_click(event, text, function))
+    text.config(state="disabled")
 
     root.mainloop()
 
 
 def main():
-    print("Def and Use")
-    function = read_assembly("risc-v2.asm")
+    args = parser.parse_args()
+    function = read_assembly(args.filename)
     show(function)
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description="Uses and defs visualizer")
+    parser.add_argument("filename", help="Input RISC-V assembly file.")
     main()
