@@ -76,27 +76,36 @@ class Function:
         return f"{self.name}\n\t{instrs}"
 
 
-def find_uses(i, instr):
-    for idx in range(i+1, len(instr)):
-        if instr[idx].op0 == instr[i].op0:
+def find_uses(ins, ii, block, done):
+    if block.name in done:
+        return
+
+    done[block.name] = True
+    instr = block.instrs
+    for idx in range(ii, len(instr)):
+        if instr[idx].instr in {"sd", "mv", "sw", "lw", "sext.w", "ld"}:
+            if ins.op0 in instr[idx].op1:
+                ins.uses.append(instr[idx])
+                instr[idx].defs.append(ins)
+
+        if instr[idx].instr in {"addi", "mulw", "andi"}:
+            if ins.op0 in instr[idx].op1 or ins.op0 in instr[idx].op2:
+                ins.uses.append(instr[idx])
+                instr[idx].defs.append(ins)
+
+        if instr[idx].op0 == ins.op0:
             return
 
-        if instr[idx].instr in {"sd", "mv", "sw", "lw", "sext.w", "ld"}:
-            if instr[i].op0 in instr[idx].op1:
-                instr[i].uses.append(instr[idx])
-                instr[idx].defs.append(instr[i])
-
-        if instr[idx].instr in {"addi", "mulw"}:
-            if instr[i].op0 in instr[idx].op1 or instr[i].op0 in instr[idx].op2:
-                instr[i].uses.append(instr[idx])
-                instr[idx].defs.append(instr[i])
+    for succ in block.succ:
+        find_uses(ins, 0, succ, done)
 
 
 def build_uses_and_defs(bb):
     for b in bb:
         for i, ins in enumerate(b.instrs):
-            if ins.instr in {"addi", "mv", "sw", "lw", "mulw", "sext.w", "ld"}:
-                find_uses(i, b.instrs)
+            if ins.instr in {"addi", "mv", "sw", "lw", "andi", "mulw", "sext.w", "ld", "slliw"}:
+                print(ins.instr)
+                find_uses(ins, i+1, b, {})
 
 
 def build_cfg(bb):
@@ -173,7 +182,10 @@ def handle_click(event, tbox, func):
     tbox.tag_remove("h0", "1.0", "end")
     tbox.tag_remove("h1", "1.0", "end")
     tbox.tag_remove("h2", "1.0", "end")
+
     ln = tbox.index(f"@{event.x},{event.y}").split(".")[0]
+    if not int(ln) < len(func.instrs):
+        return
 
     tbox.tag_add("h1", f"{ln}.0", f"{ln}.end")
     tbox.tag_config("h1", background="lightblue")
@@ -205,7 +217,8 @@ def show(function):
 
 def main():
     print("Def and Use")
-    function = read_assembly("risc-v.asm")
+    function = read_assembly("risc-v2.asm")
+    function.print_cfg()
     show(function)
 
 
