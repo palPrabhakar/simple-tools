@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 """
 Find the definition and usage of
 instructions source and destination
@@ -7,6 +6,7 @@ instructions source and destination
 import argparse
 import tkinter as tk
 from tkinter import ttk
+from collections import defaultdict
 
 
 conditional_jumps_riscv = {'beq', 'bne', 'blt', 'bge', 'bltu', 'bgeu',
@@ -104,7 +104,8 @@ def find_uses(ins, ii, block, done):
 def build_uses_and_defs(bb):
     for b in bb:
         for i, ins in enumerate(b.instrs):
-            if ins.instr in {"addi", "mv", "sw", "lw", "andi", "mulw", "sext.w", "ld", "slliw"}:
+            if ins.instr in {"addi", "mv", "sw", "lw", "andi",
+                             "mulw", "sext.w", "ld", "slliw"}:
                 find_uses(ins, i+1, b, {})
 
 
@@ -260,10 +261,57 @@ def show(function):
     root.mainloop()
 
 
+def draw_cfg(function):
+    def process_cfg(block, depth, parent, cfg_info):
+        if block.name == parent:  # avoid self-loops
+            return
+
+        if block.name in cfg_info:
+            cfg_info[block.name] = depth \
+                if depth > cfg_info[block.name] else cfg_info[block.name]
+        else:
+            cfg_info[block.name] = depth
+
+        for succ in block.succ:
+            process_cfg(succ, depth + 1, block, cfg_info)
+
+    cfg_info = {}
+    process_cfg(function.bb[0], 0, None, cfg_info)
+    inv_cfgi = defaultdict(list)
+    for k, v in cfg_info.items():
+        inv_cfgi[v].append(k)
+
+    root = tk.Tk()
+    root.title("Uses & Defs")
+
+    canvas = tk.Canvas(root, bg="lightyellow")
+    canvas.pack(fill="both", expand=True)
+
+    root.update_idletasks()  # Ensures the widget dimensions are calculated
+    canvas_width = canvas.winfo_width()
+    # print(f"Canvas Width: {canvas_width}")
+
+    # total_depth = len(inv_cfgi.keys())
+    for i in range(len(inv_cfgi.keys())):
+        width = int(canvas_width/len(inv_cfgi[i]))
+        for j in range(len(inv_cfgi[i])):
+            x1 = j*width + int(width/2) - 50
+            y1 = int(i*200) + 100
+            canvas.create_oval(x1, y1, x1+100, y1+50,
+                               fill="lightblue", outline="black")
+            center_x = (2*x1 + 100)/2
+            center_y = (2*y1 + 50)/2
+            canvas.create_text(center_x, center_y, text=inv_cfgi[i][j], font=(
+                "JetBrains Mono", 14, "bold"), fill="black")
+
+    root.mainloop()
+
+
 def main():
     args = parser.parse_args()
     function = read_assembly(args.filename)
-    show(function)
+    # show(function)
+    draw_cfg(function)
 
 
 if __name__ == '__main__':
