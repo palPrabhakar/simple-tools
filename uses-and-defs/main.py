@@ -201,7 +201,7 @@ def handle_click(event, tbox, func):
     tbox.tag_config("h2", background="lightyellow")
 
 
-def show(function):
+def show(function, root):
     def format_operands(inst):
         def format_operand(op):
             try:
@@ -236,14 +236,8 @@ def show(function):
         format_operand(inst.op2)
         text.insert("end", "\n")
 
-    root = tk.Tk()
-    root.title("Uses & Defs")
-
-    frame = ttk.Frame(root)
-    frame.pack(fill="both", expand=True)
-
-    text = tk.Text(frame, font=("JetBrains Mono", 14),  padx=10, pady=10)
-    text.pack(fill="both", expand=True)
+    text = tk.Text(root, font=("JetBrains Mono", 14),  padx=10, pady=10)
+    text.grid(row=0, column=0, sticky=tk.NSEW)
 
     text.tag_config("label", foreground="blue")
     text.tag_config("instr", foreground="red")
@@ -258,10 +252,8 @@ def show(function):
     text.bind("<Button-1>", lambda event: handle_click(event, text, function))
     text.config(state="disabled")
 
-    root.mainloop()
 
-
-def draw_cfg(function):
+def draw_cfg(function, root):
     def process_cfg(block, depth, status, cfg_info):  # DFS
         if block.name in status:
             return
@@ -276,11 +268,8 @@ def draw_cfg(function):
     for k, v in cfg_info.items():
         inv_cfgi[v].append(k)
 
-    root = tk.Tk()
-    root.title("Uses & Defs")
-
-    canvas = tk.Canvas(root, bg="lightyellow")
-    canvas.pack(fill="both", expand=True)
+    canvas = tk.Canvas(root)
+    canvas.grid(row=0, column=0, sticky=tk.NSEW)
 
     root.update_idletasks()  # Ensures the widget dimensions are calculated
     canvas_width = canvas.winfo_width()
@@ -308,14 +297,30 @@ def draw_cfg(function):
             canvas.create_line(sx, sy+HEIGHT/2, ex, ey-HEIGHT/2,
                                fill="black", width=3, arrow=tk.LAST)
 
-    root.mainloop()
-
 
 def main():
     args = parser.parse_args()
     function = read_assembly(args.filename)
-    # show(function)
-    draw_cfg(function)
+
+    root = tk.Tk()
+    root.title("Uses & Defs")
+    root.grid_columnconfigure(0, weight=1)
+    root.grid_columnconfigure(1, weight=1)
+    root.grid_rowconfigure(0, weight=1)
+
+    frame0 = tk.Frame(root)
+    frame0.grid(row=0, column=0, sticky="nsew")
+    frame0.grid_columnconfigure(0, weight=1)
+    frame0.grid_rowconfigure(0, weight=1)
+    show(function, frame0)
+
+    frame1 = tk.Frame(root)
+    frame1.grid(row=0, column=1, sticky="nsew")
+    frame1.grid_columnconfigure(0, weight=1)
+    frame1.grid_rowconfigure(0, weight=1)
+    draw_cfg(function, frame1)
+
+    root.mainloop()
 
 
 if __name__ == '__main__':
