@@ -262,21 +262,16 @@ def show(function):
 
 
 def draw_cfg(function):
-    def process_cfg(block, depth, parent, cfg_info):
-        if block.name == parent:  # avoid self-loops
+    def process_cfg(block, depth, status, cfg_info):  # DFS
+        if block.name in status:
             return
-
-        if block.name in cfg_info:
-            cfg_info[block.name] = depth \
-                if depth > cfg_info[block.name] else cfg_info[block.name]
-        else:
-            cfg_info[block.name] = depth
-
+        cfg_info[block.name] = depth
+        status.add(block.name)
         for succ in block.succ:
-            process_cfg(succ, depth + 1, block, cfg_info)
+            process_cfg(succ, depth + 1, status, cfg_info)
 
     cfg_info = {}
-    process_cfg(function.bb[0], 0, None, cfg_info)
+    process_cfg(function.bb[0], 0, set(), cfg_info)
     inv_cfgi = defaultdict(list)
     for k, v in cfg_info.items():
         inv_cfgi[v].append(k)
@@ -289,20 +284,29 @@ def draw_cfg(function):
 
     root.update_idletasks()  # Ensures the widget dimensions are calculated
     canvas_width = canvas.winfo_width()
-    # print(f"Canvas Width: {canvas_width}")
 
-    # total_depth = len(inv_cfgi.keys())
+    block_info = {}
+    WIDTH = 100
+    HEIGHT = 50
     for i in range(len(inv_cfgi.keys())):
         width = int(canvas_width/len(inv_cfgi[i]))
         for j in range(len(inv_cfgi[i])):
             x1 = j*width + int(width/2) - 50
             y1 = int(i*200) + 100
-            canvas.create_oval(x1, y1, x1+100, y1+50,
+            canvas.create_oval(x1, y1, x1+WIDTH, y1+HEIGHT,
                                fill="lightblue", outline="black")
-            center_x = (2*x1 + 100)/2
-            center_y = (2*y1 + 50)/2
+            center_x = (2*x1 + WIDTH)/2
+            center_y = (2*y1 + HEIGHT)/2
             canvas.create_text(center_x, center_y, text=inv_cfgi[i][j], font=(
                 "JetBrains Mono", 14, "bold"), fill="black")
+            block_info[inv_cfgi[i][j]] = (center_x, center_y)
+
+    for block in function.bb:
+        for succ in block.succ:
+            ex, ey = block_info[succ.name]
+            sx, sy = block_info[block.name]
+            canvas.create_line(sx, sy+HEIGHT/2, ex, ey-HEIGHT/2,
+                               fill="black", width=3, arrow=tk.LAST)
 
     root.mainloop()
 
