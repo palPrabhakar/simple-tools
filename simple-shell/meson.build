@@ -1,3 +1,9 @@
-project('Simple-Shell', 'cpp')
+project('Simple-Shell', 'cpp',
+  default_options: [
+    'cpp_std=c++23',
+    'warning_level=3'
+  ])
 
-executable('sshell', 'src/main.cpp', cpp_args: '-std=c++23')
+src = ['src/main.cpp', 'src/builtins.cpp']
+
+executable('sshell', src)
