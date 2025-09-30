@@ -42,7 +42,6 @@ void *alloc_executable_memory(size_t size, void *addr) {
 }
 
 std::vector<uint32_t> get_code_aarch64(sjp::Json &jfunc) {
-    std::cout<<"get_code_aarch64(sjp::Json &jfunc)"<<std::endl;
     std::vector<uint32_t> code;
     auto instrs = jfunc.Get("instrs").value();
     for (size_t i = 0; i < instrs.Size(); ++i) {
@@ -63,7 +62,7 @@ std::vector<uint32_t> get_code_aarch64(sjp::Json &jfunc) {
                     instr.Get("dest")->Get<std::string>().value();
                 auto regIdx = static_cast<size_t>(
                     std::stoi(dest.substr(1, dest.size() - 1)));
-                uint32_t base_code = 0x52800000;
+                uint32_t base_code = 0xd2800000;
 
                 if (regIdx < REG_SIZE) {
                     base_code |= regIdx;
@@ -76,7 +75,7 @@ std::vector<uint32_t> get_code_aarch64(sjp::Json &jfunc) {
             }
         } else if (opcode == "add") {
             if (instr.Get("type")->Get<std::string>() == "int") {
-                uint32_t base_code = 0x0b000000;
+                uint32_t base_code = 0x8b000000;
 
                 auto args = instr.Get("args").value();
                 for (auto i : std::views::iota(0ul, args.Size())) {
@@ -114,7 +113,7 @@ std::vector<uint32_t> get_code_aarch64(sjp::Json &jfunc) {
                 static_cast<size_t>(std::stoi(arg.substr(1, arg.size() - 1)));
             if (regIdx < REG_SIZE && regIdx != 0) {
                 // move the result to w0 register
-                uint32_t base_code = 0x2a0003e0;
+                uint32_t base_code = 0xaa0003e0;
                 base_code |= regIdx << 16;
                 code.push_back(base_code);
             } else {
@@ -131,14 +130,10 @@ std::vector<uint32_t> get_code_aarch64(sjp::Json &jfunc) {
 }
 
 void jit_bril() {
-    std::cout<<"jit_bril()"<<std::endl;
     std::ifstream file(
         "/home/pal/workspace/simple-tools/simple-jit/test/add.json");
-    std::cout<<"ifstream"<<std::endl;
     sjp::Parser parser(file);
-    std::cout<<"Parser"<<std::endl;
     auto json = parser.Parse();
-    std::cout<<"Json"<<std::endl;
     auto jf = json.Get("functions")->Get(0).value();
     auto code = get_code_aarch64(jf);
 
