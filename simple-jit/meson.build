@@ -22,6 +22,8 @@ libsjp_dep = sjp_proj.get_variable('libsjp_dep')
 main_exe = executable(
   'main',
   'src/main.cpp',
+  'src/emitter.cpp',
+  'src/emitter.h',
   dependencies: libsjp_dep,
 )
 

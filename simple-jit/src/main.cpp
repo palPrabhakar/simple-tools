@@ -11,6 +11,8 @@
 #include "json.hpp"
 #include "parser.hpp"
 
+#include "emitter.h"
+
 int simple_add(int x, int y);
 
 constexpr size_t SIZE = 1024;
@@ -135,6 +137,9 @@ void jit_bril() {
     sjp::Parser parser(file);
     auto json = parser.Parse();
     auto jf = json.Get("functions")->Get(0).value();
+
+    auto cc = get_code(jf);
+
     auto code = get_code_aarch64(jf);
 
     void *m = alloc_executable_memory(SIZE, nullptr);
