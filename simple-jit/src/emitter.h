@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-constexpr uint32_t ONES_16 = 0xFFFF;
+constexpr uint64_t ONES_16 = 0xFFFF;
 
 void emit_movz(uint32_t dest, uint64_t imm, std::vector<uint32_t> &output);
 

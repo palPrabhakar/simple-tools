@@ -6,13 +6,13 @@
           "dest": "v0",
           "op": "const",
           "type": "int",
-          "value": 1
+          "value": -1
         },
         {
           "dest": "v1",
           "op": "const",
           "type": "int",
-          "value": 2
+          "value": -2
         },
         {
           "args": [

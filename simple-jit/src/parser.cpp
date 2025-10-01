@@ -71,9 +71,9 @@ void parse_const(const sjp::Json &inst, std::vector<uint32_t> &code) {
 
     uint32_t dest = get_dest(inst);
     if (imm < 0) {
-        emit_movz(dest, static_cast<uint64_t>(imm), code);
-    } else {
         emit_movn(dest, imm, code);
+    } else {
+        emit_movz(dest, static_cast<uint64_t>(imm), code);
     }
 }
 

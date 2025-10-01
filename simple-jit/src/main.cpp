@@ -43,94 +43,6 @@ void *alloc_executable_memory(size_t size, void *addr) {
     return ptr;
 }
 
-std::vector<uint32_t> get_code_aarch64(sjp::Json &jfunc) {
-    std::vector<uint32_t> code;
-    auto instrs = jfunc.Get("instrs").value();
-    for (size_t i = 0; i < instrs.Size(); ++i) {
-        auto instr = instrs.Get(i).value();
-        auto opcode = instr.Get("op")->Get<std::string>();
-        if (opcode == "const") {
-            if (instr.Get("type")->Get<std::string>() == "int") {
-                int val =
-                    static_cast<int>(instr.Get("value")->Get<double>().value());
-
-                if (val < 0) {
-                    std::cerr << "No support for encoding negative numbers at "
-                                 "this time!\n";
-                    abort();
-                }
-
-                std::string dest =
-                    instr.Get("dest")->Get<std::string>().value();
-                auto regIdx = static_cast<size_t>(
-                    std::stoi(dest.substr(1, dest.size() - 1)));
-                uint32_t base_code = 0xd2800000;
-
-                if (regIdx < REG_SIZE) {
-                    base_code |= regIdx;
-                    base_code |= (uint32_t)(val << 5);
-                } else {
-                    std::cerr << "No support for more than 32 registers\n";
-                    abort();
-                }
-                code.push_back(base_code);
-            }
-        } else if (opcode == "add") {
-            if (instr.Get("type")->Get<std::string>() == "int") {
-                uint32_t base_code = 0x8b000000;
-
-                auto args = instr.Get("args").value();
-                for (auto i : std::views::iota(0ul, args.Size())) {
-                    auto arg = args.Get(i)->Get<std::string>().value();
-                    auto regIdx = static_cast<size_t>(
-                        std::stoi(arg.substr(1, arg.size() - 1)));
-                    if (regIdx < REG_SIZE) {
-                        base_code |= (regIdx << (5 + i * 11));
-                    } else {
-                        std::cerr << "No support for more than 32 registers\n";
-                        abort();
-                    }
-                }
-
-                std::string dest =
-                    instr.Get("dest")->Get<std::string>().value();
-                auto regIdx = static_cast<size_t>(
-                    std::stoi(dest.substr(1, dest.size() - 1)));
-                if (regIdx < REG_SIZE) {
-                    base_code |= regIdx;
-                } else {
-                    std::cerr << "No support for more than 32 registers\n";
-                    abort();
-                }
-                code.push_back(base_code);
-            }
-        } else if (opcode == "return") {
-            // assume the return address is in w30 reg!
-            uint32_t base_code = 0xd65f03c0;
-
-            auto args = instr.Get("args").value();
-            assert(args.Size() == 1);
-            auto arg = args.Get(0)->Get<std::string>().value();
-            auto regIdx =
-                static_cast<size_t>(std::stoi(arg.substr(1, arg.size() - 1)));
-            if (regIdx < REG_SIZE && regIdx != 0) {
-                // move the result to w0 register
-                uint32_t base_code = 0xaa0003e0;
-                base_code |= regIdx << 16;
-                code.push_back(base_code);
-            } else {
-                std::cerr << "No support for more than 32 registers\n";
-                abort();
-            }
-            code.push_back(base_code);
-        } else {
-            std::cerr << "Panik: Invalid Opcode\n";
-            abort();
-        }
-    }
-    return code;
-}
-
 void jit_bril() {
     std::ifstream file(
         "/home/pal/workspace/simple-tools/simple-jit/test/add.json");
@@ -140,18 +52,13 @@ void jit_bril() {
 
     auto code = get_code(jf);
 
-    // auto code = get_code_aarch64(jf);
-
     void *m = alloc_executable_memory(SIZE, nullptr);
     memcpy(m, code.data(), code.size() * sizeof(code.data()));
-
-    std::cout << std::hex << "PC: " << reinterpret_cast<uint64_t>(m)
-              << std::endl;
 
     jit_f f = (jit_f)m;
     long result = f();
 
-    std::cout << "Result: " << result << std::endl;
+    std::cout << std::dec << "result: " << result << std::endl;
 }
 
 void jit_printf() {
@@ -278,7 +185,7 @@ void jit_simple_add() {
     jit_i p = (jit_i)m;
     std::cout << "Calling jit func" << std::endl;
     int res = p();
-    std::cout << "Result: " << res << std::endl;
+    std::cout << std::dec << "Result: " << res << std::endl;
 }
 
 int main() {
