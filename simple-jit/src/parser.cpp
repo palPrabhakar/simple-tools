@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <array>
 
 #include "emitter.h"
 #include "parser.h"
@@ -48,6 +49,12 @@ std::vector<uint32_t> get_code(const sjp::Json &f) {
     return code;
 }
 
+static inline void check_type_int(const sjp::Json &inst) {
+    if (inst.Get("type")->Get<std::string>() != "int") {
+        throw std::runtime_error("error: only int type supported\n");
+    }
+}
+
 static inline uint32_t get_register(std::string reg) {
     uint32_t idx =
         static_cast<uint32_t>(std::stoul(reg.substr(1, reg.size() - 1)));
@@ -62,13 +69,20 @@ static inline uint32_t get_dest(const sjp::Json &inst) {
     return get_register(inst.Get("dest")->Get<std::string>().value());
 }
 
+static inline std::array<uint32_t, 2> get_srcs(const sjp::Json &inst) {
+    std::array<uint32_t, 2> srcs;
+    auto args = inst.Get("args").value();
+    for (auto i : std::views::iota(0ul, args.Size())) {
+        srcs[i] = get_register(args.Get(i)->Get<std::string>().value());
+    }
+    return srcs;
+}
+
 void parse_const(const sjp::Json &inst, std::vector<uint32_t> &code) {
     /* TODO:
      * Use orr(immed) to encode immeds that can't be encoded using movz/movn
      */
-    if (inst.Get("type")->Get<std::string>() != "int") {
-        throw std::runtime_error("error: only int type supported\n");
-    }
+    check_type_int(inst);
 
     int64_t imm = static_cast<int>(inst.Get("value")->Get<double>().value());
 
@@ -81,18 +95,31 @@ void parse_const(const sjp::Json &inst, std::vector<uint32_t> &code) {
 }
 
 void parse_add(const sjp::Json &inst, std::vector<uint32_t> &code) {
-    if (inst.Get("type")->Get<std::string>() != "int") {
-        throw std::runtime_error("error: only int type supported\n");
-    }
-
-    auto args = inst.Get("args").value();
-    uint32_t srcs[2];
-    for (auto i : std::views::iota(0ul, args.Size())) {
-        srcs[i] = get_register(args.Get(i)->Get<std::string>().value());
-    }
-
+    check_type_int(inst);
+    auto srcs = get_srcs(inst);
     uint32_t dest_reg = get_dest(inst);
     emit_add_sr(dest_reg, srcs[0], srcs[1], code);
+}
+
+void parse_sub(const sjp::Json &inst, std::vector<uint32_t> &code) {
+    check_type_int(inst);
+    auto srcs = get_srcs(inst);
+    uint32_t dest_reg = get_dest(inst);
+    emit_sub_sr(dest_reg, srcs[0], srcs[1], code);
+}
+
+void parse_mul(const sjp::Json &inst, std::vector<uint32_t> &code) {
+    check_type_int(inst);
+    auto srcs = get_srcs(inst);
+    uint32_t dest_reg = get_dest(inst);
+    emit_mul(dest_reg, srcs[0], srcs[1], code);
+}
+
+void parse_div(const sjp::Json &inst, std::vector<uint32_t> &code) {
+    check_type_int(inst);
+    auto srcs = get_srcs(inst);
+    uint32_t dest_reg = get_dest(inst);
+    emit_sdiv(dest_reg, srcs[0], srcs[1], code);
 }
 
 void parse_return(const sjp::Json &inst, std::vector<uint32_t> &code) {

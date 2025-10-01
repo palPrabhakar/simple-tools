@@ -8,9 +8,9 @@ constexpr uint32_t REG_SIZE = 32;
 // X(opcode, supported)
 #define OPCODE_LIST                                                            \
     X(add, 1)                                                                  \
-    X(mul, 0)                                                                  \
-    X(sub, 0)                                                                  \
-    X(div, 0)                                                                  \
+    X(mul, 1)                                                                  \
+    X(sub, 1)                                                                  \
+    X(div, 1)                                                                  \
     X(eq, 0)                                                                   \
     X(lt, 0)                                                                   \
     X(gt, 0)                                                                   \

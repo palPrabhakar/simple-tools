@@ -25,6 +25,15 @@ static void emit_mov_helper(uint32_t code, uint32_t dest, uint64_t imm,
     output.push_back(code);
 }
 
+static inline void emit_binop_helper(uint32_t code, uint32_t dest,
+                                     uint32_t src0, uint32_t src1,
+                                     std::vector<uint32_t> &output) {
+    code |= dest;       // Rd
+    code |= src0 << 5;  // Rn
+    code |= src1 << 16; // Rm
+    output.push_back(code);
+}
+
 void emit_movz(uint32_t dest, uint64_t imm, std::vector<uint32_t> &output) {
     // mov wide with zero
     // https://developer.arm.com/documentation/ddi0602/2025-09/Base-Instructions/MOVZ--Move-wide-with-zero-?lang=en
@@ -44,10 +53,31 @@ void emit_add_sr(uint32_t dest, uint32_t src0, uint32_t src1,
     // add shifted register
     // https://developer.arm.com/documentation/ddi0602/2025-09/Base-Instructions/ADD--shifted-register---Add-optionally-shifted-register-?lang=en
     uint32_t code = 0x8b000000;
-    code |= src0 << 5;  // Rn
-    code |= src1 << 16; // Rm
-    code |= dest;       // Rd
-    output.push_back(code);
+    emit_binop_helper(code, dest, src0, src1, output);
+}
+
+void emit_sub_sr(uint32_t dest, uint32_t src0, uint32_t src1,
+                 std::vector<uint32_t> &output) {
+    // sub shifted register
+    // https://developer.arm.com/documentation/ddi0602/2025-09/Base-Instructions/SUB--shifted-register---Subtract-optionally-shifted-register-?lang=en
+    uint32_t code = 0xcb000000;
+    emit_binop_helper(code, dest, src0, src1, output);
+}
+
+void emit_mul(uint32_t dest, uint32_t src0, uint32_t src1,
+              std::vector<uint32_t> &output) {
+    // mul
+    // https://developer.arm.com/documentation/ddi0602/2025-09/Base-Instructions/MUL--Multiply--an-alias-of-MADD-?lang=en
+    uint32_t code = 0x9b007c00;
+    emit_binop_helper(code, dest, src0, src1, output);
+}
+
+void emit_sdiv(uint32_t dest, uint32_t src0, uint32_t src1,
+               std::vector<uint32_t> &output) {
+    // sdiv
+    // https://developer.arm.com/documentation/ddi0602/2025-09/Base-Instructions/SDIV--Signed-divide-?lang=en
+    uint32_t code = 0x9ac00c00;
+    emit_binop_helper(code, dest, src0, src1, output);
 }
 
 void emit_orr_sr(uint32_t dest, uint32_t src, std::vector<uint32_t> &output) {
