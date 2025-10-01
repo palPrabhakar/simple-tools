@@ -33,3 +33,10 @@ main_exe = executable(
   dependencies: libsjp_dep,
 )
 
+
+test_exe = executable(
+  'test_emitter',
+  'src/emitter.cpp',
+  'src/emitter.h',
+  'test/test_emitter.cpp',
+)

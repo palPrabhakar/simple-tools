@@ -63,6 +63,9 @@ static inline uint32_t get_dest(const sjp::Json &inst) {
 }
 
 void parse_const(const sjp::Json &inst, std::vector<uint32_t> &code) {
+    /* TODO:
+     * Use orr(immed) to encode immeds that can't be encoded using movz/movn
+     */
     if (inst.Get("type")->Get<std::string>() != "int") {
         throw std::runtime_error("error: only int type supported\n");
     }
