@@ -3,7 +3,11 @@
 #include <cstdint>
 #include <vector>
 
-void emit_movz(uint32_t dest, int, std::vector<uint32_t> &output);
+constexpr uint32_t ONES_16 = 0xFFFF;
+
+void emit_movz(uint32_t dest, uint64_t imm, std::vector<uint32_t> &output);
+
+void emit_movn(uint32_t dest, int64_t imm, std::vector<uint32_t> &output);
 
 void emit_add_sr(uint32_t dest, uint32_t src0, uint32_t src1,
                  std::vector<uint32_t> &output);

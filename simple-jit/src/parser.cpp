@@ -33,7 +33,7 @@ const std::unordered_map<std::string, Parser> parser_list = {
 #undef X
 };
 
-std::vector<uint32_t> get_code([[maybe_unused]] const sjp::Json &f) {
+std::vector<uint32_t> get_code(const sjp::Json &f) {
     std::vector<uint32_t> code;
     auto instrs = f.Get("instrs").value();
     for (auto i : std::views::iota(0ul, instrs.Size())) {
@@ -58,8 +58,8 @@ static inline uint32_t get_register(std::string reg) {
     return idx;
 }
 
-static inline std::string get_dest(const sjp::Json &inst) {
-    return inst.Get("dest")->Get<std::string>().value();
+static inline uint32_t get_dest(const sjp::Json &inst) {
+    return get_register(inst.Get("dest")->Get<std::string>().value());
 }
 
 void parse_const(const sjp::Json &inst, std::vector<uint32_t> &code) {
@@ -67,15 +67,14 @@ void parse_const(const sjp::Json &inst, std::vector<uint32_t> &code) {
         throw std::runtime_error("error: only int type supported\n");
     }
 
-    int imm = static_cast<int>(inst.Get("value")->Get<double>().value());
+    int64_t imm = static_cast<int>(inst.Get("value")->Get<double>().value());
 
+    uint32_t dest = get_dest(inst);
     if (imm < 0) {
-        throw std::runtime_error(
-            "error: no suppport for encoding negative numbers\n");
+        emit_movz(dest, static_cast<uint64_t>(imm), code);
+    } else {
+        emit_movn(dest, imm, code);
     }
-
-    uint32_t dest = get_register(get_dest(inst));
-    emit_movz(dest, imm, code);
 }
 
 void parse_add(const sjp::Json &inst, std::vector<uint32_t> &code) {
@@ -89,7 +88,7 @@ void parse_add(const sjp::Json &inst, std::vector<uint32_t> &code) {
         srcs[i] = get_register(args.Get(i)->Get<std::string>().value());
     }
 
-    uint32_t dest_reg = get_register(get_dest(inst));
+    uint32_t dest_reg = get_dest(inst);
     emit_add_sr(dest_reg, srcs[0], srcs[1], code);
 }
 
