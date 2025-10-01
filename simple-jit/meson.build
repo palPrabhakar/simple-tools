@@ -18,12 +18,18 @@ add_project_arguments(
 sjp_proj = subproject('libsjp')
 libsjp_dep = sjp_proj.get_variable('libsjp_dep')
 
-# Main executable (only built if this is the main project)
-main_exe = executable(
-  'main',
+srcs = [
   'src/main.cpp',
   'src/parser.cpp',
   'src/parser.h',
+  'src/emitter.cpp',
+  'src/emitter.h',
+  ]
+
+# Main executable (only built if this is the main project)
+main_exe = executable(
+  'main',
+  srcs,
   dependencies: libsjp_dep,
 )
 
