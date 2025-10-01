@@ -11,7 +11,7 @@
 #include "json.hpp"
 #include "parser.hpp"
 
-#include "emitter.h"
+#include "parser.h"
 
 int simple_add(int x, int y);
 
@@ -25,7 +25,7 @@ typedef int (*jit_i)(void);
 typedef void (*jit_p)(void);
 typedef int (*printf_ptr)(const char *restrict, ...);
 
-constexpr size_t REG_SIZE = 32;
+// constexpr size_t REG_SIZE = 32;
 
 void do_print(void) { printf("Hello World\n"); }
 
@@ -138,9 +138,9 @@ void jit_bril() {
     auto json = parser.Parse();
     auto jf = json.Get("functions")->Get(0).value();
 
-    auto cc = get_code(jf);
+    auto code = get_code(jf);
 
-    auto code = get_code_aarch64(jf);
+    // auto code = get_code_aarch64(jf);
 
     void *m = alloc_executable_memory(SIZE, nullptr);
     memcpy(m, code.data(), code.size() * sizeof(code.data()));
