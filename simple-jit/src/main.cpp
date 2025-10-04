@@ -35,9 +35,10 @@ void *alloc_executable_memory(size_t size, void *addr) {
     void *ptr = mmap(addr, size, PROT_READ | PROT_WRITE | PROT_EXEC,
                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
-    if (ptr == nullptr) {
+    if (ptr == MAP_FAILED) {
+        std::cout << "eror" << std::endl;
         perror("mmap");
-        return nullptr;
+        exit(EXIT_FAILURE);
     }
 
     return ptr;
@@ -61,121 +62,111 @@ void jit_bril() {
     std::cout << std::dec << "result: " << result << std::endl;
 }
 
-void jit_printf() {
-    void *libc_handle;
-    void *printf_handle;
-
-    libc_handle = dlopen("/usr/bin/lic.so.6", RTLD_NOW | RTLD_GLOBAL);
-    if (!libc_handle) {
-        std::cerr << "Error loading libc: " << dlerror() << std::endl;
-        return;
-    }
-
-    printf_handle = dlsym(libc_handle, "printf");
-
-    std::vector<uint32_t> code;
-    void *m = alloc_executable_memory(
-        SIZE, reinterpret_cast<void *>(reinterpret_cast<uint64_t>(jit_printf) -
-                                       2 * 4096));
-
-    code.push_back(0xA9BF7BFD); // stp x29, x30, [sp, #-16]!
-    code.push_back(0x910003FD); // mov x29, sp
-                                //
-    std::cout << std::hex << "PC: " << reinterpret_cast<uint64_t>(m)
-              << std::endl;
-    std::cout << "printf: " << reinterpret_cast<uint64_t>(printf_handle)
-              << std::endl;
-    std::cout << "hello_str: " << reinterpret_cast<uint64_t>(&hello_str)
-              << std::endl;
-
-    auto addr_paligned =
-        reinterpret_cast<uint64_t>(&hello_str) & (MASK_ALL_1 << 12);
-    uint32_t offset = reinterpret_cast<uint64_t>(&hello_str) & MASK_4095;
-
-    auto pc_paligned =
-        (reinterpret_cast<uint64_t>(m) + code.size() * sizeof(uint32_t)) &
-        (MASK_ALL_1 << 12);
-    std::cout << "pc_paligned: " << pc_paligned << std::endl;
-
-    int64_t diff =
-        static_cast<int64_t>(addr_paligned) - static_cast<int64_t>(pc_paligned);
-    if (diff < 0) {
-        std::cout << "NEGATIVE OFFSET STR" << std::endl;
-    }
-    std::cout << "diff(str_pal - pc_pal): " << diff << std::endl;
-
-    int64_t pc_rel_off =
-        static_cast<int64_t>(addr_paligned) - static_cast<int64_t>(pc_paligned);
-    int64_t sign = (pc_rel_off >> 63) & 1;
-    int64_t rem = (pc_rel_off >> 12) && (MASK_ALL_1 >> 12);
-    int64_t immlo = (rem & 3) << 28;
-    int64_t immhi = (sign << 18) | (immlo >> 12);
-
-    uint32_t base_adrp = 0x90000000;
-    base_adrp = base_adrp + (unsigned int)immlo + (unsigned int)immhi;
-
-    std::cout << "base_adrp: " << base_adrp << std::endl;
-    code.push_back(base_adrp);
-
-    uint32_t base_add = 0x91000000;
-    base_add = base_add + (offset << 10);
-    std::cout << "base_add: " << base_add << std::endl;
-    code.push_back(base_add);
-
-    uint32_t base_bl = 0x94000000;
-    int32_t printf_off = static_cast<int32_t>(
-        reinterpret_cast<int64_t>(printf_handle) -
-        reinterpret_cast<int64_t>(m) - 2 * sizeof(uint32_t));
-    int32_t ss = (printf_off >> 31) & 1;
-    printf_off = (printf_off & 0x03FFFFFF) | (ss << 24);
-    base_bl |= (uint32_t)printf_off;
-    std::cout << "base_bl: " << base_bl << std::endl;
-    code.push_back(base_bl);
-
-    code.push_back(0xA8C17BFD);
-    code.push_back(0xD65F03C0);
-
-    memcpy(m, code.data(), code.size() * sizeof(code.data()));
-
-    jit_p p = (jit_p)m;
-    std::cout << "Calling printf: " << std::endl;
-    p();
-
-    dlclose(libc_handle);
-}
-
 void jit_simple_add() {
     std::vector<uint32_t> code;
-    void *m = alloc_executable_memory(
-        SIZE, reinterpret_cast<void *>(
-                  reinterpret_cast<uint64_t>(jit_simple_add) - 2 * 4096));
+
+    uint64_t addr =
+        (reinterpret_cast<uint64_t>(jit_simple_add) + 130 * 1024 * 1024) &
+        (MASK_ALL_1 << 12);
+    void *m = alloc_executable_memory(SIZE, nullptr);
+
     code.push_back(0xA9BF7BFD);
     code.push_back(0x910003FD);
 
-    code.push_back(0xD2800280);
-    code.push_back(0xD28002C1);
+    code.push_back(0xD2800280); // x0
+    code.push_back(0xD28002C1); // x1
 
-    uint32_t base_bl = 0x94000000;
     int64_t pc = reinterpret_cast<int64_t>(m) +
                  static_cast<int64_t>(code.size() * sizeof(uint32_t));
-    int32_t off =
-        static_cast<int32_t>(reinterpret_cast<int64_t>(simple_add) - pc);
+    int64_t off = reinterpret_cast<int64_t>(simple_add) - pc;
 
     std::cout << std::hex << "PC: " << pc << std::endl;
+    std::cout << "jit_simple_add: " << reinterpret_cast<int64_t>(jit_simple_add)
+              << std::endl;
     std::cout << "simple_add: " << reinterpret_cast<int64_t>(simple_add)
+              << std::endl;
+    std::cout << "simple_add - jit_simple_add: "
+              << reinterpret_cast<uint64_t>(simple_add) -
+                     reinterpret_cast<uint64_t>(jit_simple_add)
               << std::endl;
     std::cout << "offset: " << off << std::endl;
 
-    if (off < 0) {
-        std::cout << "NEGATIVE OFFSET" << std::endl;
-        return;
-    }
+    if (off < -0x2000000 || off > 0x1FFFFFF) {
+        std::cerr << "Encoding using adrp, add, blr\n";
+        uint32_t base_adrp = 0x90000000;
+        // need to use adrp and
+        pc &= (MASK_ALL_1 << 12);
+        int64_t loc = static_cast<int64_t>(
+            reinterpret_cast<uint64_t>(simple_add) & (MASK_ALL_1 << 12));
+        int64_t off = loc - pc;
+        if (off < 0) {
+            std::cout << "Negative offset\n";
+        }
+        off >>= 12;
+        if (off < -1048576 || off > 1048575) {
+            // use movz/movk to build the address in register
+            uint64_t sa = reinterpret_cast<uint64_t>(simple_add);
+            uint32_t base_movz = 0xd2800000;
+            base_movz |= (sa & 0xFFFF) << 5;
+            base_movz |= 0x2;
+            code.push_back(base_movz);
+            sa >>= 16;
 
-    off = (off >> 2);
-    std::cout << "Offset: " << off << std::endl;
-    base_bl |= (uint32_t)off;
-    std::cout << "base_bl: " << base_bl << std::endl;
-    code.push_back(base_bl);
+            uint32_t base_movk2 = 0xf2a00000; // lsl-2
+            base_movk2 |= (sa & 0xFFFF) << 5;
+            base_movk2 |= 0x2;
+            code.push_back(base_movk2);
+            sa >>= 16;
+
+            uint32_t base_movk3 = 0xf2c00000; // lsl-3
+            base_movk3 |= (sa & 0xFFFF) << 5;
+            base_movk3 |= 0x2;
+            code.push_back(base_movk3);
+            sa >>= 16;
+
+            uint32_t base_movk4 = 0xf2e00000; // lsl-3
+            base_movk4 |= (sa & 0xFFFF) << 5;
+            base_movk4 |= 0x2;
+            code.push_back(base_movk4);
+
+        } else {
+            off &= 0x1FFFFF;
+            std::cout << "off: " << off << std::endl;
+            base_adrp |= ((off & 0x3) << 29);
+            std::cout << "base_adrp: " << base_adrp << std::endl;
+            off >>= 2;
+            base_adrp |= (off << 5);
+            base_adrp |= 0x2;
+            std::cout << "base_adrp: " << base_adrp << std::endl;
+            code.push_back(base_adrp);
+
+            uint32_t base_add = 0x91000000;
+            uint64_t offset =
+                reinterpret_cast<uint64_t>(simple_add) & MASK_4095;
+            base_add |= (offset << 10);
+            base_add |= (0x2 << 5);
+            base_add |= 0x2; // dest
+            std::cout << "base_add: " << base_add << std::endl;
+            code.push_back(base_add);
+        }
+
+        uint32_t base_blr = 0xd63f0000;
+        base_blr |= (0x2 << 5);
+        std::cout << "base_blr: " << base_blr << std::endl;
+        code.push_back(base_blr);
+    } else {
+        std::cerr << "Encoding using bl\n";
+        uint32_t base_bl = 0x94000000;
+        // can directly encode the immed offset in the bl instr
+        if (off < 0) {
+            std::cout << "Negative offset\n";
+        }
+        off = (off >> 2);
+        std::cout << "Offset: " << off << std::endl;
+        base_bl |= static_cast<uint32_t>(off & 0x3FFFFFF);
+        std::cout << "base_bl: " << base_bl << std::endl;
+        code.push_back(base_bl);
+    }
 
     code.push_back(0xA8C17BFD);
     code.push_back(0xD65F03C0);
@@ -191,13 +182,15 @@ void jit_simple_add() {
 int main() {
     std::cout << "Simple JIT" << std::endl;
 
-    jit_bril();
+    // jit_bril();
 
-    // jit_printf();
-
-    // jit_simple_add();
+    jit_simple_add();
 
     return 0;
 }
 
-int simple_add(int x, int y) { return x + y; }
+int simple_add(int x, int y) {
+    int res = x + y;
+    printf("%d + %d = %d\n", x, y, res);
+    return res;
+}
