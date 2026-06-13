@@ -24,6 +24,7 @@ srcs = [
   'src/parser.h',
   'src/emitter.cpp',
   'src/emitter.h',
+  'src/utils.cpp',
   ]
 
 # Main executable (only built if this is the main project)

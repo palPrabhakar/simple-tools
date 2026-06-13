@@ -3,35 +3,29 @@
     {
       "instrs": [
         {
-          "dest": "v0",
-          "op": "const",
-          "type": "int",
-          "value": -1
-        },
-        {
           "dest": "v1",
           "op": "const",
           "type": "int",
-          "value": -2
+          "value": 42
         },
         {
-          "args": [
-            "v0",
-            "v1"
-          ],
           "dest": "v2",
-          "op": "add",
-          "type": "int"
+          "op": "const",
+          "type": "int",
+          "value": 111
         },
         {
           "args": [
+            "v1",
             "v2"
           ],
+          "op": "print"
+        },
+        {
           "op": "ret"
         }
       ],
-      "name": "main",
-      "type": "int"
+      "name": "main"
     }
   ]
 }

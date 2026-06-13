@@ -4,7 +4,6 @@
 #include <dlfcn.h>
 #include <fstream>
 #include <iostream>
-#include <ranges>
 #include <sys/mman.h>
 #include <vector>
 
@@ -36,7 +35,6 @@ void *alloc_executable_memory(size_t size, void *addr) {
                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
     if (ptr == MAP_FAILED) {
-        std::cout << "eror" << std::endl;
         perror("mmap");
         exit(EXIT_FAILURE);
     }
@@ -53,13 +51,15 @@ void jit_bril() {
 
     auto code = get_code(jf);
 
+    // for (auto it : code) {
+    //     std::cout << std::hex << it << "\n";
+    // }
+
     void *m = alloc_executable_memory(SIZE, nullptr);
     memcpy(m, code.data(), code.size() * sizeof(code.data()));
 
-    jit_f f = (jit_f)m;
-    long result = f();
-
-    std::cout << std::dec << "result: " << result << std::endl;
+    jit_p f = (jit_p)m;
+    f();
 }
 
 void jit_simple_add() {
@@ -70,8 +70,8 @@ void jit_simple_add() {
         (MASK_ALL_1 << 12);
     void *m = alloc_executable_memory(SIZE, nullptr);
 
-    code.push_back(0xA9BF7BFD);
-    code.push_back(0x910003FD);
+    code.push_back(0xA9BF7BFD); // stp x29, x30, [sp, #-16]! --> also updates the SP
+    code.push_back(0x910003FD); // mov x29, sp
 
     code.push_back(0xD2800280); // x0
     code.push_back(0xD28002C1); // x1
@@ -168,8 +168,8 @@ void jit_simple_add() {
         code.push_back(base_bl);
     }
 
-    code.push_back(0xA8C17BFD);
-    code.push_back(0xD65F03C0);
+    code.push_back(0xA8C17BFD); // ldp	x29, x30, [sp], #16
+    code.push_back(0xD65F03C0); // ret
 
     memcpy(m, code.data(), code.size() * sizeof(code.data()));
 
@@ -182,9 +182,9 @@ void jit_simple_add() {
 int main() {
     std::cout << "Simple JIT" << std::endl;
 
-    // jit_bril();
+    jit_bril();
 
-    jit_simple_add();
+    // jit_simple_add();
 
     return 0;
 }

@@ -22,7 +22,7 @@ constexpr uint32_t REG_SIZE = 32;
     X(jmp, 0)                                                                  \
     X(br, 0)                                                                   \
     X(call, 0)                                                                 \
-    X(return, 1)                                                               \
+    X(ret, 1)                                                               \
     X(fadd, 0)                                                                 \
     X(fmul, 0)                                                                 \
     X(fsub, 0)                                                                 \
@@ -34,7 +34,7 @@ constexpr uint32_t REG_SIZE = 32;
     X(fge, 0)                                                                  \
     X(id, 0)                                                                   \
     X(const, 1)                                                                \
-    X(print, 0)                                                                \
+    X(print, 1)                                                                \
     X(label, 0)                                                                \
     X(nop, 0)
 
