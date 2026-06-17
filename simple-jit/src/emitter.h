@@ -3,12 +3,14 @@
 #include <cstdint>
 #include <vector>
 
+#define _cast_uint32(x) static_cast<uint32_t>(x)
+
 constexpr uint64_t ONES_64 = 0xFFFFFFFFFFFFFFFF;
 constexpr uint64_t ONES_16 = 0xFFFF;
 
-constexpr uint32_t SP = 0x1F;
-
 using reg_t = uint32_t;
+
+constexpr reg_t SP = 0x1F;
 
 enum class LS_MODE { POST = 1, SIGNED = 2, PRE = 3 };
 
@@ -46,3 +48,9 @@ void emit_stp(reg_t daddr, int32_t doffset, reg_t src1, reg_t src2,
 
 void emit_ldp(reg_t saddr, int32_t soffset, reg_t dest1, reg_t dest2,
               LS_MODE mode, std::vector<uint32_t> &output);
+
+void emit_ldr_imm(reg_t saddr, int32_t soffset, reg_t dest, LS_MODE mode,
+                  std::vector<uint32_t> &output);
+
+void emit_str_imm(reg_t daddr, int32_t doffset, reg_t src, LS_MODE mode,
+                  std::vector<uint32_t> &output);

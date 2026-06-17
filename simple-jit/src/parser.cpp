@@ -3,7 +3,10 @@
 #include <ranges>
 #include <stdexcept>
 #include <string>
-#include <unordered_map>
+#include <map>
+#include <sys/types.h>
+#include <vector>
+#include <iostream>
 
 #include "emitter.h"
 #include "parser.h"
@@ -55,9 +58,9 @@ static inline void check_type_int(const sjp::Json &inst) {
     }
 }
 
-static inline uint32_t get_register(std::string reg) {
+static inline reg_t get_register(std::string reg) {
     uint32_t idx =
-        static_cast<uint32_t>(std::stoul(reg.substr(1, reg.size() - 1)));
+        static_cast<reg_t>(std::stoul(reg.substr(1, reg.size() - 1)));
     if (idx >= REG_SIZE) {
         throw std::runtime_error(
             "error: no support for more than 32 registers\n");
@@ -80,11 +83,11 @@ static inline std::array<uint32_t, 2> get_srcs(const sjp::Json &inst) {
     return srcs;
 }
 
-static inline std::vector<uint32_t> get_args(const sjp::Json &inst) {
+static inline std::vector<reg_t> get_args(const sjp::Json &inst) {
     assert(inst.Get("args").has_value() && "err: expected more than 0 args");
 
     auto args = inst.Get("args").value();
-    std::vector<uint32_t> regs(args.Size());
+    std::vector<reg_t> regs(args.Size());
 
     for (auto i : std::views::iota(0ul, args.Size())) {
         regs[i] = get_register(args.Get(i)->Get<std::string>().value());
@@ -167,31 +170,67 @@ void parse_print(const sjp::Json &inst, std::vector<uint32_t> &code) {
             "err: print supports only 7 args at this time\n");
     }
 
-    uint32_t first = 0;
-    for (auto i : args) {
-        if (i != ++first) {
-            throw std::runtime_error("err: argument in wrong register\n");
+    std::map<reg_t, reg_t> pos;
+    for (auto i : std::views::iota(0u, args.size())) {
+        if (args[i] != i + 1) {
+            // args[i] not in reg i + 1
+            // record reg loc of  i + 1
+            pos[i + 1] = args[i];
+            std::cout<<"arg "<<i+1<<" in loc "<<args[i]<<std::endl;
         }
+    }
+
+    for(auto &[k, v] : pos) {
+        // store reg k at loc_k
+        emit_str_imm(SP, -8, k, LS_MODE::PRE, code);
+    }
+
+    for(auto &[k, v]: pos) {
+        // store reg v at loc_v
+        emit_str_imm(SP, -8, v, LS_MODE::PRE, code);
+    }
+
+    int offset = static_cast<int>((pos.size() - 1) * 8);
+    for(auto [k, v]: pos) {
+        // load reg k from loc_v
+        emit_ldr_imm(SP, offset, k, LS_MODE::SIGNED, code);
+        offset -= 8;
     }
 
     // set num args in x0
     emit_movz(0, static_cast<uint16_t>(args.size()), 0, code);
 
     // prepare branch dest address
+    // using r16 -> IP0 for holding branch instruction
     auto print_addr = reinterpret_cast<uint64_t>(print_int);
-    emit_movz(3, (print_addr & ONES_16), 0, code);
+    reg_t breg = 16;
+    emit_movz(breg, (print_addr & ONES_16), 0, code);
     print_addr >>= 16;
-    emit_movk(3, (print_addr & ONES_16), 1, code);
+    emit_movk(breg, (print_addr & ONES_16), 1, code);
     print_addr >>= 16;
-    emit_movk(3, (print_addr & ONES_16), 2, code);
+    emit_movk(breg, (print_addr & ONES_16), 2, code);
     print_addr >>= 16;
-    emit_movk(3, (print_addr & ONES_16), 3, code);
+    emit_movk(breg, (print_addr & ONES_16), 3, code);
 
     emit_stp(SP, -16, 29, 30, LS_MODE::PRE, code);
 
     emit_mov_sp(29, SP, code);
 
-    emit_blr(3, code);
+    emit_blr(breg, code);
 
     emit_ldp(SP, 16, 29, 30, LS_MODE::POST, code);
+
+    offset = 0;
+    for(auto [k, v]: pos) {
+        // load reg v from loc_v
+        emit_ldr_imm(SP, offset, v, LS_MODE::POST, code);
+        offset += 8;
+    }
+
+    offset = 0;
+    for(auto [k, v]: pos) {
+        // load reg k from loc_k
+        emit_ldr_imm(SP, offset, k, LS_MODE::POST, code);
+        offset += 8;
+    }
 }
