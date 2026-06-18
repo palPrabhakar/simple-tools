@@ -176,7 +176,6 @@ void parse_print(const sjp::Json &inst, std::vector<uint32_t> &code) {
             // args[i] not in reg i + 1
             // record reg loc of  i + 1
             pos[i + 1] = args[i];
-            std::cout<<"arg "<<i+1<<" in loc "<<args[i]<<std::endl;
         }
     }
 

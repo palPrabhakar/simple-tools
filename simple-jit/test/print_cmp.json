@@ -22,6 +22,21 @@
           "op": "print"
         },
         {
+          "args": [
+            "v1",
+            "v2"
+          ],
+          "dest": "v3",
+          "op": "sub",
+          "type": "int"
+        },
+        {
+          "args": [
+            "v3"
+          ],
+          "op": "print"
+        },
+        {
           "op": "ret"
         }
       ],
