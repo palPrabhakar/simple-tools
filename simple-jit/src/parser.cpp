@@ -6,7 +6,6 @@
 #include <map>
 #include <sys/types.h>
 #include <vector>
-#include <iostream>
 
 #include "emitter.h"
 #include "parser.h"
@@ -179,12 +178,12 @@ void parse_print(const sjp::Json &inst, std::vector<uint32_t> &code) {
         }
     }
 
-    for(auto &[k, v] : pos) {
+    for(auto [k, v] : pos) {
         // store reg k at loc_k
         emit_str_imm(SP, -8, k, ls_mode::pre, code);
     }
 
-    for(auto &[k, v]: pos) {
+    for(auto [k, v]: pos) {
         // store reg v at loc_v
         emit_str_imm(SP, -8, v, ls_mode::pre, code);
     }
@@ -219,17 +218,13 @@ void parse_print(const sjp::Json &inst, std::vector<uint32_t> &code) {
 
     emit_ldp(SP, 16, 29, 30, ls_mode::post, code);
 
-    offset = 0;
     for(auto [k, v]: pos) {
         // load reg v from loc_v
-        emit_ldr_imm(SP, offset, v, ls_mode::post, code);
-        offset += 8;
+        emit_ldr_imm(SP, 8, v, ls_mode::post, code);
     }
 
-    offset = 0;
     for(auto [k, v]: pos) {
         // load reg k from loc_k
-        emit_ldr_imm(SP, offset, k, ls_mode::post, code);
-        offset += 8;
+        emit_ldr_imm(SP, 8, k, ls_mode::post, code);
     }
 }
