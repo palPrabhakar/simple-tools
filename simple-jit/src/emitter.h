@@ -5,14 +5,14 @@
 
 #define _cast_uint32(x) static_cast<uint32_t>(x)
 
-constexpr uint64_t ONES_64 = 0xFFFFFFFFFFFFFFFF;
-constexpr uint64_t ONES_16 = 0xFFFF;
+constexpr uint64_t ONES_32 = 0xFFFFFFFF;
+constexpr uint16_t ONES_16 = 0xFFFF;
 
 using reg_t = uint32_t;
 
 constexpr reg_t SP = 0x1F;
 
-enum class LS_MODE { POST = 1, SIGNED = 2, PRE = 3 };
+enum class ls_mode { post = 1, offset = 2, pre = 3 };
 
 void emit_movz(reg_t dest, uint16_t imm, unsigned char shift,
                std::vector<uint32_t> &output);
@@ -44,13 +44,13 @@ void emit_ret(std::vector<uint32_t> &output);
 void emit_blr(reg_t addr, std::vector<uint32_t> &output);
 
 void emit_stp(reg_t daddr, int32_t doffset, reg_t src1, reg_t src2,
-              LS_MODE mode, std::vector<uint32_t> &output);
+              ls_mode mode, std::vector<uint32_t> &output);
 
 void emit_ldp(reg_t saddr, int32_t soffset, reg_t dest1, reg_t dest2,
-              LS_MODE mode, std::vector<uint32_t> &output);
+              ls_mode mode, std::vector<uint32_t> &output);
 
-void emit_ldr_imm(reg_t saddr, int32_t soffset, reg_t dest, LS_MODE mode,
+void emit_ldr_imm(reg_t saddr, int32_t soffset, reg_t dest, ls_mode mode,
                   std::vector<uint32_t> &output);
 
-void emit_str_imm(reg_t daddr, int32_t doffset, reg_t src, LS_MODE mode,
+void emit_str_imm(reg_t daddr, int32_t doffset, reg_t src, ls_mode mode,
                   std::vector<uint32_t> &output);

@@ -107,9 +107,9 @@ void parse_const(const sjp::Json &inst, std::vector<uint32_t> &code) {
 
     uint32_t dest = get_dest(inst);
     if (imm < 0) {
-        assert(!((imm | ONES_16) ^ ONES_64) &&
+        assert(!((imm | ONES_16) ^ ONES_32) &&
                "err: only support for 16-bit imm\n");
-        imm = ~imm;
+        // imm = ~imm;
         emit_movn(dest, static_cast<uint16_t>(imm), 0, code);
     } else {
         assert(!(imm >> 16) && "err: only support for 16-bit imm\n");
@@ -182,18 +182,18 @@ void parse_print(const sjp::Json &inst, std::vector<uint32_t> &code) {
 
     for(auto &[k, v] : pos) {
         // store reg k at loc_k
-        emit_str_imm(SP, -8, k, LS_MODE::PRE, code);
+        emit_str_imm(SP, -8, k, ls_mode::pre, code);
     }
 
     for(auto &[k, v]: pos) {
         // store reg v at loc_v
-        emit_str_imm(SP, -8, v, LS_MODE::PRE, code);
+        emit_str_imm(SP, -8, v, ls_mode::pre, code);
     }
 
     int offset = static_cast<int>((pos.size() - 1) * 8);
     for(auto [k, v]: pos) {
         // load reg k from loc_v
-        emit_ldr_imm(SP, offset, k, LS_MODE::SIGNED, code);
+        emit_ldr_imm(SP, offset, k, ls_mode::offset, code);
         offset -= 8;
     }
 
@@ -212,25 +212,25 @@ void parse_print(const sjp::Json &inst, std::vector<uint32_t> &code) {
     print_addr >>= 16;
     emit_movk(breg, (print_addr & ONES_16), 3, code);
 
-    emit_stp(SP, -16, 29, 30, LS_MODE::PRE, code);
+    emit_stp(SP, -16, 29, 30, ls_mode::pre, code);
 
     emit_mov_sp(29, SP, code);
 
     emit_blr(breg, code);
 
-    emit_ldp(SP, 16, 29, 30, LS_MODE::POST, code);
+    emit_ldp(SP, 16, 29, 30, ls_mode::post, code);
 
     offset = 0;
     for(auto [k, v]: pos) {
         // load reg v from loc_v
-        emit_ldr_imm(SP, offset, v, LS_MODE::POST, code);
+        emit_ldr_imm(SP, offset, v, ls_mode::post, code);
         offset += 8;
     }
 
     offset = 0;
     for(auto [k, v]: pos) {
         // load reg k from loc_k
-        emit_ldr_imm(SP, offset, k, LS_MODE::POST, code);
+        emit_ldr_imm(SP, offset, k, ls_mode::post, code);
         offset += 8;
     }
 }

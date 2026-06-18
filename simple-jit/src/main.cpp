@@ -51,15 +51,15 @@ void jit_bril() {
 
     auto code = get_code(jf);
 
-    for (auto it : code) {
-        std::cout << std::hex << it << "\n";
-    }
+    // for (auto it : code) {
+    //     std::cout << std::hex << it << "\n";
+    // }
 
-    // void *m = alloc_executable_memory(SIZE, nullptr);
-    // memcpy(m, code.data(), code.size() * sizeof(code.data()));
+    void *m = alloc_executable_memory(SIZE, nullptr);
+    memcpy(m, code.data(), code.size() * sizeof(code.data()));
 
-    // jit_p f = (jit_p)m;
-    // f();
+    jit_p f = (jit_p)m;
+    f();
 }
 
 void jit_simple_add() {

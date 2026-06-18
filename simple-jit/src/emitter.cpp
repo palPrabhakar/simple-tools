@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cstdint>
 
 #include "emitter.h"
 
@@ -21,7 +22,7 @@ static inline void emit_binop_helper(uint32_t code, reg_t dest, reg_t src0,
 }
 
 static void emit_stp_ldp(uint32_t code, reg_t rn, reg_t rt1, reg_t rt2,
-                         int32_t offset, LS_MODE mode,
+                         int32_t offset, ls_mode mode,
                          std::vector<uint32_t> &output) {
     assert((offset & 7) == 0 && "err: offset must be a multiple of 8\n");
 
@@ -35,15 +36,15 @@ static void emit_stp_ldp(uint32_t code, reg_t rn, reg_t rt1, reg_t rt2,
 }
 
 static void emit_ldr_str(uint32_t code, reg_t rn, reg_t rt, int32_t imm,
-                         LS_MODE mode, std::vector<uint32_t> &output) {
-    if (mode == LS_MODE::SIGNED) {
+                         ls_mode mode, std::vector<uint32_t> &output) {
+    if (mode == ls_mode::offset) {
         // assert(!(imm >> 12) && "err: imm not 12 bit\n");
-        code |= _cast_uint32(mode) << 24;
-        code |= _cast_uint32(imm) << 10;
+        code |= _cast_uint32(mode) << 23;
+        code |= _cast_uint32((imm & 0xFFF)/ 8) << 10;
     } else {
         // assert(!(imm >> 9) && "err: imm not 9 bit\n");
         code |= _cast_uint32(mode) << 10;
-        code |= _cast_uint32(imm) << 12;
+        code |= _cast_uint32((imm & 0x1FF)) << 12;
     }
     code |= rt;
     code |= rn << 5;
@@ -63,7 +64,7 @@ void emit_movn(reg_t dest, uint16_t imm, unsigned char shift,
     // move with with not
     // https://developer.arm.com/documentation/ddi0602/2025-09/Base-Instructions/MOVN--Move-wide-with-NOT-?lang=en
     uint32_t code = 0x92800000;
-    emit_mov_helper(code, dest, imm, shift, output);
+    emit_mov_helper(code, dest, static_cast<uint16_t>(~imm), shift, output);
 }
 
 void emit_movk(reg_t dest, uint16_t imm, unsigned char shift,
@@ -142,7 +143,7 @@ void emit_blr(reg_t addr, std::vector<uint32_t> &output) {
 }
 
 void emit_stp(reg_t daddr, int32_t doffset, reg_t src1, reg_t src2,
-              LS_MODE mode, std::vector<uint32_t> &output) {
+              ls_mode mode, std::vector<uint32_t> &output) {
     // store reg src1, src2 at addr
     // https://developer.arm.com/documentation/ddi0602/2025-09/Base-Instructions/STP--Store-pair-of-registers-?lang=en#iclass_pre_index
     uint32_t code = 0xa8000000;
@@ -150,14 +151,14 @@ void emit_stp(reg_t daddr, int32_t doffset, reg_t src1, reg_t src2,
 }
 
 void emit_ldp(reg_t saddr, int32_t soffset, reg_t dest1, reg_t dest2,
-              LS_MODE mode, std::vector<uint32_t> &output) {
+              ls_mode mode, std::vector<uint32_t> &output) {
     // load reg dest1, dest2 from addr
     // https://developer.arm.com/documentation/ddi0602/2025-09/Base-Instructions/LDP--Load-pair-of-registers-
     uint32_t code = 0xa8400000;
     emit_stp_ldp(code, saddr, dest1, dest2, soffset, mode, output);
 }
 
-void emit_ldr_imm(reg_t saddr, int32_t soffset, reg_t dest, LS_MODE mode,
+void emit_ldr_imm(reg_t saddr, int32_t soffset, reg_t dest, ls_mode mode,
                   std::vector<uint32_t> &output) {
     // load reg from a mem location
     // https://developer.arm.com/documentation/ddi0602/2025-09/Base-Instructions/LDR--immediate---Load-register--immediate--
@@ -165,7 +166,7 @@ void emit_ldr_imm(reg_t saddr, int32_t soffset, reg_t dest, LS_MODE mode,
     emit_ldr_str(code, saddr, dest, soffset, mode, output);
 }
 
-void emit_str_imm(reg_t daddr, int32_t doffset, reg_t src, LS_MODE mode,
+void emit_str_imm(reg_t daddr, int32_t doffset, reg_t src, ls_mode mode,
                   std::vector<uint32_t> &output) {
     // store reg to a mem location
     // https://developer.arm.com/documentation/ddi0602/2025-09/Base-Instructions/STR--immediate---Store-register--immediate--
