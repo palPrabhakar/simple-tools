@@ -44,7 +44,7 @@ void *alloc_executable_memory(size_t size, void *addr) {
 
 void jit_bril() {
     std::ifstream file(
-        "/home/pal/workspace/simple-tools/simple-jit/test/print.json");
+        "/home/pal/workspace/simple-tools/simple-jit/test/print_cmp.json");
     sjp::Parser parser(file);
     auto json = parser.Parse();
     auto jf = json.Get("functions")->Get(0).value();

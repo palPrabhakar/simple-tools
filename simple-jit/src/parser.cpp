@@ -218,12 +218,12 @@ void parse_print(const sjp::Json &inst, std::vector<uint32_t> &code) {
 
     emit_ldp(SP, 16, 29, 30, ls_mode::post, code);
 
-    for(auto [k, v]: pos) {
+    for(auto [k, v]: std::views::reverse(pos)) {
         // load reg v from loc_v
         emit_ldr_imm(SP, 8, v, ls_mode::post, code);
     }
 
-    for(auto [k, v]: pos) {
+    for(auto [k, v]: std::views::reverse(pos)) {
         // load reg k from loc_k
         emit_ldr_imm(SP, 8, k, ls_mode::post, code);
     }

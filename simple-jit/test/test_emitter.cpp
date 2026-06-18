@@ -52,6 +52,20 @@ void test_movn() {
 #undef movn
 }
 
+void test_add_sr() {
+    std::vector<uint32_t> code;
+#define add emit_add_sr
+    TEST(add(0, 1, 0, code), code.back(), 0x8b000020)
+#undef add
+}
+
+void test_sub_sr() {
+    std::vector<uint32_t> code;
+#define sub emit_sub_sr
+    TEST(sub(0, 1, 0, code), code.back(), 0xcb000020)
+#undef sub
+}
+
 void test_ldr_imm() {
     std::vector<uint32_t> code;
 #define ldr emit_ldr_imm
@@ -78,6 +92,8 @@ int main() {
     std::cout << "Emitter Test\n";
     test_movz();
     test_movn();
+    test_add_sr();
+    test_sub_sr();
     test_ldr_imm();
     test_str_imm();
     return 0;
