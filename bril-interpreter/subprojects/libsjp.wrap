@@ -1,0 +1,6 @@
+[wrap-git]
+directory=simple-json-parser
+url = git@github.com:palPrabhakar/simple-json-parser.git
+revision = HEAD
+depth = 1
+
