@@ -10,7 +10,7 @@
 
 struct Frame;
 
-using Value = std::variant<bool, float, int>;
+using Value = std::variant<char, bool, float, int>;
 
 struct Frame {
     std::unordered_map<std::string, Value> variables;
@@ -59,9 +59,6 @@ const std::unordered_map<std::string, Interpreter> opcode_list = {
 #define has_dest(x) x.Get("dest").has_value()
 #define get_dest(x) x.Get("dest")->Get<std::string>().value()
 #define get_type(x) x.Get("type")->Get<std::string>().value()
-#define value_bool(x) x.Get("value")->Get<bool>().value()
-#define value_float(x) static_cast<float>(x.Get("value")->Get<double>().value())
-#define value_int(x) static_cast<int>(x.Get("value")->Get<double>().value())
 #define get_args(x, i) x.Get("args")->Get(i)->Get<std::string>().value()
 #define args_size(x) x.Get("args")->Size()
 #define has_opcode(x) x.Get("op").has_value()
@@ -69,6 +66,10 @@ const std::unordered_map<std::string, Interpreter> opcode_list = {
 #define labels_size(x) x.Get("labels")->Size()
 #define get_labels(x, i) x.Get("labels")->Get(i)->Get<std::string>().value()
 #define get_name(x) x.Get("name")->Get<std::string>().value();
+#define value_char(x) x.Get("value")->Get<std::string>().value()[0]
+#define value_bool(x) x.Get("value")->Get<bool>().value()
+#define value_float(x) static_cast<float>(x.Get("value")->Get<double>().value())
+#define value_int(x) static_cast<int>(x.Get("value")->Get<double>().value())
 
 // frame helpers
 #define get_arg_v(f, in, i) f.variables[get_args(in, i)]
@@ -458,3 +459,43 @@ void interpret_or(Context &ctx, const sjp::Json &instr) {
     set_dest(frame, instr, (operation<std::logical_or, bool>(ctx, instr)));
     _inc_ip;
 }
+
+void interpret_ceq(Context &ctx, const sjp::Json &instr) {
+    _frame;
+    set_dest(frame, instr, (operation<std::equal_to, char, bool>(ctx, instr)));
+    _inc_ip;
+}
+
+void interpret_clt(Context &ctx, const sjp::Json &instr) {
+    _frame;
+    set_dest(frame, instr, (operation<std::less, char, bool>(ctx, instr)));
+    _inc_ip;
+}
+
+void interpret_cle(Context &ctx, const sjp::Json &instr) {
+    _frame;
+    set_dest(frame, instr, (operation<std::less_equal, char, bool>(ctx, instr)));
+    _inc_ip;
+}
+void interpret_cgt(Context &ctx, const sjp::Json &instr) {
+
+    _frame;
+    set_dest(frame, instr, (operation<std::greater, char, bool>(ctx, instr)));
+    _inc_ip;
+}
+
+void interpret_cge(Context &ctx, const sjp::Json &instr) {
+    _frame;
+    set_dest(frame, instr, (operation<std::greater_equal, char, bool>(ctx, instr)));
+    _inc_ip;
+}
+
+// void interpret_char2int(Context &ctx, const sjp::Json &instr) {
+//     _frame;
+//     _inc_ip;
+// }
+// void interpret_int2char(Context &ctx, const sjp::Json &instr) {
+//     _frame;
+//     _inc_ip;
+// }
+

@@ -1,6 +1,7 @@
 #pragma once
 
 #define TYPE_LIST                                                              \
+    X(char, 'c')                                                               \
     X(bool, 'b')                                                               \
     X(float, 'f')                                                              \
     X(int, 'i')
@@ -47,11 +48,11 @@
     X(speculate, 0)                                                            \
     X(commit, 0)                                                               \
     X(guard, 0)                                                                \
-    X(ceq, 0)                                                                  \
-    X(clt, 0)                                                                  \
-    X(cle, 0)                                                                  \
-    X(cgt, 0)                                                                  \
-    X(cge, 0)                                                                  \
+    X(ceq, 1)                                                                  \
+    X(clt, 1)                                                                  \
+    X(cle, 1)                                                                  \
+    X(cgt, 1)                                                                  \
+    X(cge, 1)                                                                  \
     X(char2int, 0)                                                             \
     X(int2char, 0)                                                             \
     X(float2bits, 0)                                                           \
