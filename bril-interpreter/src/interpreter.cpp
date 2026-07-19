@@ -56,6 +56,7 @@ const std::unordered_map<std::string, Interpreter> opcode_list = {
 };
 
 // json helpers
+#define has_dest(x) x.Get("dest").has_value()
 #define get_dest(x) x.Get("dest")->Get<std::string>().value()
 #define get_type(x) x.Get("type")->Get<std::string>().value()
 #define value_bool(x) x.Get("value")->Get<bool>().value()
@@ -67,6 +68,7 @@ const std::unordered_map<std::string, Interpreter> opcode_list = {
 #define has_label(x) x.Get("label").has_value()
 #define labels_size(x) x.Get("labels")->Size()
 #define get_labels(x, i) x.Get("labels")->Get(i)->Get<std::string>().value()
+#define get_name(x) x.Get("name")->Get<std::string>().value();
 
 // frame helpers
 #define get_arg_v(f, in, i) f.variables[get_args(in, i)]
@@ -93,6 +95,55 @@ Context create_context(const sjp::Json &program) {
     return ctx;
 }
 
+std::vector<Value> get_main_args(Context &ctx, int argc, char **argv) {
+    const auto func = ctx.functions.at("main");
+
+    const auto args = func.Get("args");
+
+    if (!args.has_value()) {
+        return {};
+    }
+
+    if (static_cast<size_t>(argc) < args->Size()) {
+        throw std::runtime_error(std::format(
+            "main: argument size mismatch. expected: {} - found: {}",
+            args->Size(), argc));
+    }
+
+    std::vector<Value> v_args;
+
+    for (auto i : _iota(0u, args->Size())) {
+        auto arg = args->Get(i).value();
+        switch (get_type(arg)[0]) {
+        case 'b': {
+            if (std::string_view(argv[i]) == std::string_view("true") ||
+                std::string_view(argv[i]) == std::string_view("1")) {
+                v_args.emplace_back(true);
+            } else if (std::string_view(argv[i]) == std::string_view("false") ||
+                       std::string_view(argv[i]) == std::string_view("0")) {
+                v_args.emplace_back(false);
+            } else {
+                throw std::runtime_error(std::format(
+                    "invalid argument {}. Cannot covert to bool\n", argv[i]));
+            }
+        } break;
+        case 'i': {
+            if (std::string_view(argv[i]).find('.') != std::string::npos) {
+                throw std::invalid_argument("float string not allowed");
+            }
+            v_args.emplace_back(std::stoi(argv[i]));
+        } break;
+        case 'f':
+            v_args.emplace_back(std::stof(argv[i]));
+            break;
+        default:
+            throw std::runtime_error("invalid type\n");
+        }
+    }
+
+    return v_args;
+}
+
 void setup_frame(Context &ctx, std::string fn_name, std::vector<Value> v_args) {
     const auto func = ctx.functions.at(fn_name);
 
@@ -110,7 +161,7 @@ void setup_frame(Context &ctx, std::string fn_name, std::vector<Value> v_args) {
 
         for (auto i : _iota(0u, args->Size())) {
             auto arg = args->Get(i).value();
-            auto name = arg.Get("name")->Get<std::string>().value();
+            auto name = get_name(arg);
             switch (get_type(arg)[0]) {
 #define X(t, v)                                                                \
     case v:                                                                    \
@@ -133,8 +184,8 @@ void find_label(Context &ctx, std::string lbl_name) {
     const auto func = ctx.functions.at(frame.name);
     const auto instrs = func.Get("instrs").value();
 
-    size_t i = frame.ip + 1;
-    while (i < frame.end) {
+    size_t i = frame.ip;
+    while (++i < frame.end) {
         auto instr = instrs.Get(i).value();
         if (has_label(instr)) {
             auto lbl = instr.Get("label")->Get<std::string>().value();
@@ -148,11 +199,9 @@ void find_label(Context &ctx, std::string lbl_name) {
     throw std::runtime_error(std::format("label: {} not found\n", lbl_name));
 }
 
-void interpret_program(sjp::Json &program) {
+void interpret_program(sjp::Json &program, int argc, char **argv) {
     auto ctx = create_context(program);
-    // TODO:
-    // parse main args
-    setup_frame(ctx, "main", {});
+    setup_frame(ctx, "main", get_main_args(ctx, argc, argv));
     interpret_function(ctx, "main");
 }
 
@@ -169,7 +218,6 @@ void interpret_function(Context &ctx, std::string fn_name) {
 
     while (frame.ip < frame.end) {
         const auto instr = instrs.Get(frame.ip).value();
-
         if (has_opcode(instr)) {
             const auto opcode = instr.Get("op")->Get<std::string>().value();
             opcode_list.at(opcode)(ctx, instr);
@@ -201,8 +249,8 @@ void interpret_const(Context &ctx, const sjp::Json &instr) {
     _inc_ip;
 }
 
-template <template <typename> typename Op, typename T>
-T operation(Context &ctx, const sjp::Json &instr) {
+template <template <typename> typename Op, typename T, typename R = T>
+R operation(Context &ctx, const sjp::Json &instr) {
     _frame;
     Op<T> op;
     return op(std::get<T>(get_arg_v(frame, instr, 0)),
@@ -235,31 +283,32 @@ void interpret_div(Context &ctx, const sjp::Json &instr) {
 
 void interpret_eq(Context &ctx, const sjp::Json &instr) {
     _frame;
-    set_dest(frame, instr, (operation<std::equal_to, int>(ctx, instr)));
+    set_dest(frame, instr, (operation<std::equal_to, int, bool>(ctx, instr)));
     _inc_ip;
 }
 
 void interpret_lt(Context &ctx, const sjp::Json &instr) {
     _frame;
-    set_dest(frame, instr, (operation<std::less, int>(ctx, instr)));
+    set_dest(frame, instr, (operation<std::less, int, bool>(ctx, instr)));
     _inc_ip;
 }
 
 void interpret_gt(Context &ctx, const sjp::Json &instr) {
     _frame;
-    set_dest(frame, instr, (operation<std::greater, int>(ctx, instr)));
+    set_dest(frame, instr, (operation<std::greater, int, bool>(ctx, instr)));
     _inc_ip;
 }
 
 void interpret_le(Context &ctx, const sjp::Json &instr) {
     _frame;
-    set_dest(frame, instr, (operation<std::less_equal, int>(ctx, instr)));
+    set_dest(frame, instr, (operation<std::less_equal, int, bool>(ctx, instr)));
     _inc_ip;
 }
 
 void interpret_ge(Context &ctx, const sjp::Json &instr) {
     _frame;
-    set_dest(frame, instr, (operation<std::greater_equal, int>(ctx, instr)));
+    set_dest(frame, instr,
+             (operation<std::greater_equal, int, bool>(ctx, instr)));
     _inc_ip;
 }
 
@@ -289,31 +338,33 @@ void interpret_fdiv(Context &ctx, const sjp::Json &instr) {
 
 void interpret_feq(Context &ctx, const sjp::Json &instr) {
     _frame;
-    set_dest(frame, instr, (operation<std::equal_to, float>(ctx, instr)));
+    set_dest(frame, instr, (operation<std::equal_to, float, bool>(ctx, instr)));
     _inc_ip;
 }
 
 void interpret_flt(Context &ctx, const sjp::Json &instr) {
     _frame;
-    set_dest(frame, instr, (operation<std::less, float>(ctx, instr)));
+    set_dest(frame, instr, (operation<std::less, float, bool>(ctx, instr)));
     _inc_ip;
 }
 
 void interpret_fgt(Context &ctx, const sjp::Json &instr) {
     _frame;
-    set_dest(frame, instr, (operation<std::greater, float>(ctx, instr)));
+    set_dest(frame, instr, (operation<std::greater, float, bool>(ctx, instr)));
     _inc_ip;
 }
 
 void interpret_fle(Context &ctx, const sjp::Json &instr) {
     _frame;
-    set_dest(frame, instr, (operation<std::less_equal, float>(ctx, instr)));
+    set_dest(frame, instr,
+             (operation<std::less_equal, float, bool>(ctx, instr)));
     _inc_ip;
 }
 
 void interpret_fge(Context &ctx, const sjp::Json &instr) {
     _frame;
-    set_dest(frame, instr, (operation<std::greater_equal, float>(ctx, instr)));
+    set_dest(frame, instr,
+             (operation<std::greater_equal, float, bool>(ctx, instr)));
     _inc_ip;
 }
 
@@ -334,27 +385,76 @@ void interpret_print(Context &ctx, const sjp::Json &instr) {
 void interpret_ret(Context &ctx, const sjp::Json &instr) {
     _frame;
     if (instr.Get("args").has_value()) {
-        assert(args_size(instr) == 1 && "more than one return value\n");
         ctx.ret_val = get_arg_v(frame, instr, 0);
     }
     frame.ip = frame.end;
 }
 
-void interpret_jmp(Context &ctx, const sjp::Json &instr) {
+void jmp_to_label(Context &ctx, const std::string lbl) {
     _frame;
-    assert(labels_size(instr) == 1 && "more than one labels in jmp instr\n");
-    auto lbl = get_labels(instr, 0);
-
     if (!frame.labels.contains(lbl)) {
         find_label(ctx, lbl);
     }
-
     frame.ip = frame.labels[lbl] + 1;
+}
+
+void interpret_jmp(Context &ctx, const sjp::Json &instr) {
+    auto lbl = get_labels(instr, 0);
+    jmp_to_label(ctx, lbl);
+}
+
+void interpret_br(Context &ctx, const sjp::Json &instr) {
+    _frame;
+    auto cond = std::get<bool>(get_arg_v(frame, instr, 0));
+    std::string lbl = cond ? get_labels(instr, 0) : get_labels(instr, 1);
+    jmp_to_label(ctx, lbl);
 }
 
 void interpret_label(Context &ctx, const sjp::Json &instr) {
     _frame;
     auto lbl_name = instr.Get("label")->Get<std::string>().value();
     frame.labels[lbl_name] = frame.ip;
+    _inc_ip;
+}
+
+void interpret_id(Context &ctx, const sjp::Json &instr) {
+    _frame;
+    set_dest(frame, instr, get_arg_v(frame, instr, 0));
+    _inc_ip;
+}
+
+void interpret_call(Context &ctx, const sjp::Json &instr) {
+    _frame;
+
+    std::vector<Value> v_args;
+    for (auto i : _iota(0u, args_size(instr))) {
+        v_args.emplace_back(get_arg_v(frame, instr, i));
+    }
+    auto fn_name = instr.Get("funcs")->Get(0)->Get<std::string>().value();
+    setup_frame(ctx, fn_name, std::move(v_args));
+    interpret_function(ctx, fn_name);
+
+    if (has_dest(instr)) {
+        set_dest(frame, instr, ctx.ret_val);
+    }
+    _inc_ip;
+}
+
+void interpret_not(Context &ctx, const sjp::Json &instr) {
+    _frame;
+    auto value = std::get<bool>(get_arg_v(frame, instr, 0));
+    set_dest(frame, instr, !value);
+    _inc_ip;
+}
+
+void interpret_and(Context &ctx, const sjp::Json &instr) {
+    _frame;
+    set_dest(frame, instr, (operation<std::logical_and, bool>(ctx, instr)));
+    _inc_ip;
+}
+
+void interpret_or(Context &ctx, const sjp::Json &instr) {
+    _frame;
+    set_dest(frame, instr, (operation<std::logical_or, bool>(ctx, instr)));
     _inc_ip;
 }

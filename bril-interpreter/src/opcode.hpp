@@ -1,8 +1,8 @@
 #pragma once
 
 #define TYPE_LIST                                                              \
-    X(bool, 'b')                                                                       \
-    X(float, 'f')                                                                       \
+    X(bool, 'b')                                                               \
+    X(float, 'f')                                                              \
     X(int, 'i')
 
 // X(opcode, supported)
@@ -16,12 +16,12 @@
     X(gt, 1)                                                                   \
     X(le, 1)                                                                   \
     X(ge, 1)                                                                   \
-    X(and, 0)                                                                  \
-    X(or, 0)                                                                   \
-    X(not, 0)                                                                  \
+    X(and, 1)                                                                  \
+    X(or, 1)                                                                   \
+    X(not, 1)                                                                  \
     X(jmp, 1)                                                                  \
-    X(br, 0)                                                                   \
-    X(call, 0)                                                                 \
+    X(br, 1)                                                                   \
+    X(call, 1)                                                                 \
     X(ret, 1)                                                                  \
     X(fadd, 1)                                                                 \
     X(fmul, 1)                                                                 \
@@ -32,8 +32,28 @@
     X(fgt, 1)                                                                  \
     X(fle, 1)                                                                  \
     X(fge, 1)                                                                  \
-    X(id, 0)                                                                   \
+    X(id, 1)                                                                   \
     X(const, 1)                                                                \
     X(print, 1)                                                                \
     X(label, 1)                                                                \
-    X(nop, 0)
+    X(nop, 0)                                                                  \
+    X(set, 0)                                                                  \
+    X(get, 0)                                                                  \
+    X(alloc, 0)                                                                \
+    X(free, 0)                                                                 \
+    X(store, 0)                                                                \
+    X(load, 0)                                                                 \
+    X(ptradd, 0)                                                               \
+    X(speculate, 0)                                                            \
+    X(commit, 0)                                                               \
+    X(guard, 0)                                                                \
+    X(ceq, 0)                                                                  \
+    X(clt, 0)                                                                  \
+    X(cle, 0)                                                                  \
+    X(cgt, 0)                                                                  \
+    X(cge, 0)                                                                  \
+    X(char2int, 0)                                                             \
+    X(int2char, 0)                                                             \
+    X(float2bits, 0)                                                           \
+    X(bits2float, 0)                                                           \
+    X(any, 0)

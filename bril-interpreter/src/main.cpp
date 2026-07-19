@@ -5,13 +5,11 @@
 #include "json.hpp"
 #include "parser.hpp"
 
-void interpret_program(sjp::Json &);
+void interpret_program(sjp::Json &, int, char **);
 
 int main(int argc, char **argv) {
-    std::println("Bril Interpreter");
-
     if (argc < 2) {
-        std::println("Usage: ./main <bril.json>");
+        std::println("Usage: ./main <bril.json> <...input_args>");
         std::exit(1);
     }
 
@@ -19,5 +17,5 @@ int main(int argc, char **argv) {
     sjp::Parser parser(input_stream);
     sjp::Json json = parser.Parse();
 
-    interpret_program(json);
+    interpret_program(json, argc - 2, argv + 2);
 }
