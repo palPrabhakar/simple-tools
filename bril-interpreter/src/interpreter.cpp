@@ -10,7 +10,8 @@
 
 struct Frame;
 
-using Value = std::variant<char, bool, float, int>;
+using Value =
+    std::variant<bool, char, float, int, bool *, char *, float *, int *>;
 
 struct Frame {
     std::unordered_map<std::string, Value> variables;
@@ -58,7 +59,9 @@ const std::unordered_map<std::string, Interpreter> opcode_list = {
 // json helpers
 #define has_dest(x) x.Get("dest").has_value()
 #define get_dest(x) x.Get("dest")->Get<std::string>().value()
+#define is_ptr(x) (x.Get("type")->type == sjp::JsonType::jobject)
 #define get_type(x) x.Get("type")->Get<std::string>().value()
+#define get_ptr_type(x) x.Get("type")->Get("ptr")->Get<std::string>().value()
 #define get_args(x, i) x.Get("args")->Get(i)->Get<std::string>().value()
 #define args_size(x) x.Get("args")->Size()
 #define has_opcode(x) x.Get("op").has_value()
@@ -163,11 +166,18 @@ void setup_frame(Context &ctx, std::string fn_name, std::vector<Value> v_args) {
         for (auto i : _iota(0u, args->Size())) {
             auto arg = args->Get(i).value();
             auto name = get_name(arg);
-            switch (get_type(arg)[0]) {
-#define X(t, v)                                                                \
-    case v:                                                                    \
-        frame.variables.emplace(name, std::get<t>(v_args[i]));                 \
-        break;
+
+            auto is_ptr = is_ptr(arg);
+            auto scond = is_ptr ? get_ptr_type(arg) : get_type(arg);
+            switch (scond[0]) {
+#define X(t, v, _)                                                             \
+    case v: {                                                                  \
+        if (is_ptr)                                                            \
+            frame.variables.emplace(name, std::get<t *>(v_args[i]));           \
+        else                                                                   \
+            frame.variables.emplace(name, std::get<t>(v_args[i]));             \
+        break;                                                                 \
+    }
                 TYPE_LIST
 #undef X
             default:
@@ -231,9 +241,9 @@ void interpret_function(Context &ctx, std::string fn_name) {
     ctx.frames.pop();
 }
 
-Value get_value(const sjp::Json &instr) {
+Value get_json_value(const sjp::Json &instr) {
     switch (get_type(instr)[0]) {
-#define X(t, v)                                                                \
+#define X(t, v, i)                                                             \
     case v:                                                                    \
         return value_##t(instr);
         TYPE_LIST
@@ -246,7 +256,7 @@ Value get_value(const sjp::Json &instr) {
 void interpret_const(Context &ctx, const sjp::Json &instr) {
     _frame;
     auto dest = get_dest(instr);
-    set_dest(frame, instr, get_value(instr));
+    set_dest(frame, instr, get_json_value(instr));
     _inc_ip;
 }
 
@@ -474,7 +484,8 @@ void interpret_clt(Context &ctx, const sjp::Json &instr) {
 
 void interpret_cle(Context &ctx, const sjp::Json &instr) {
     _frame;
-    set_dest(frame, instr, (operation<std::less_equal, char, bool>(ctx, instr)));
+    set_dest(frame, instr,
+             (operation<std::less_equal, char, bool>(ctx, instr)));
     _inc_ip;
 }
 void interpret_cgt(Context &ctx, const sjp::Json &instr) {
@@ -486,16 +497,102 @@ void interpret_cgt(Context &ctx, const sjp::Json &instr) {
 
 void interpret_cge(Context &ctx, const sjp::Json &instr) {
     _frame;
-    set_dest(frame, instr, (operation<std::greater_equal, char, bool>(ctx, instr)));
+    set_dest(frame, instr,
+             (operation<std::greater_equal, char, bool>(ctx, instr)));
     _inc_ip;
 }
 
-// void interpret_char2int(Context &ctx, const sjp::Json &instr) {
-//     _frame;
-//     _inc_ip;
-// }
-// void interpret_int2char(Context &ctx, const sjp::Json &instr) {
-//     _frame;
-//     _inc_ip;
-// }
+void interpret_alloc(Context &ctx, const sjp::Json &instr) {
+    _frame;
+    auto size = static_cast<size_t>(std::get<int>(get_arg_v(frame, instr, 0)));
+    switch (get_ptr_type(instr)[0]) {
+#define X(t, v, i)                                                             \
+    case v:                                                                    \
+        set_dest(frame, instr, new t[size]);                                   \
+        break;
+        TYPE_LIST
+#undef X
+    }
+    _inc_ip;
+}
 
+void interpret_free(Context &ctx, const sjp::Json &instr) {
+    _frame;
+    auto ptr = get_arg_v(frame, instr, 0);
+    switch (ptr.index()) {
+#define X(t, v, i)                                                             \
+    case i:                                                                    \
+        delete std::get<t *>(ptr);                                             \
+        break;
+        TYPE_LIST
+#undef X
+    default:
+        throw std::runtime_error("invalid ptr type\n");
+    }
+    _inc_ip;
+}
+
+void interpret_store(Context &ctx, const sjp::Json &instr) {
+    _frame;
+
+    auto ptr = get_arg_v(frame, instr, 0);
+    auto val = get_arg_v(frame, instr, 1);
+
+    if (val.index() + 4 != ptr.index()) {
+        throw std::runtime_error("err ptr and value type don't match\n");
+    }
+
+    switch (ptr.index()) {
+#define X(t, v, i)                                                             \
+    case i:                                                                    \
+        *(std::get<t *>(ptr)) = std::get<t>(val);                              \
+        break;
+        TYPE_LIST
+#undef X
+    default:
+        throw std::runtime_error("invalid type\n");
+    }
+
+    _inc_ip;
+}
+
+void interpret_load(Context &ctx, const sjp::Json &instr) {
+    _frame;
+
+    auto ptr = get_arg_v(frame, instr, 0);
+    switch (get_type(instr)[0]) {
+#define X(t, v, i)                                                             \
+    case v:                                                                    \
+        set_dest(frame, instr, *(std::get<t *>(ptr)));                         \
+        break;
+        TYPE_LIST
+#undef X
+    }
+
+    _inc_ip;
+}
+
+void interpret_ptradd(Context &ctx, const sjp::Json &instr) {
+    _frame;
+
+    auto val = std::get<int>(get_arg_v(frame, instr, 1));
+    auto ptr = get_arg_v(frame, instr, 0);
+
+    switch (get_ptr_type(instr)[0]) {
+#define X(t, v, i)                                                             \
+    case v: {                                                                  \
+        assert(ptr.index() == i && "dest and src ptr type don't match\n");     \
+        set_dest(frame, instr, std::get<t *>(ptr) + val);                      \
+        break;                                                                 \
+    }
+        TYPE_LIST
+#undef X
+    }
+
+    _inc_ip;
+}
+
+void interpret_nop(Context &ctx, [[maybe_unused]] const sjp::Json &json) {
+    _frame;
+    _inc_ip;
+}

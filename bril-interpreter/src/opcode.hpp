@@ -1,10 +1,10 @@
 #pragma once
 
 #define TYPE_LIST                                                              \
-    X(char, 'c')                                                               \
-    X(bool, 'b')                                                               \
-    X(float, 'f')                                                              \
-    X(int, 'i')
+    X(bool, 'b', 4)                                                            \
+    X(char, 'c', 5)                                                            \
+    X(float, 'f', 6)                                                           \
+    X(int, 'i', 7)
 
 // X(opcode, supported)
 #define OPCODE_LIST                                                            \
@@ -37,14 +37,14 @@
     X(const, 1)                                                                \
     X(print, 1)                                                                \
     X(label, 1)                                                                \
-    X(nop, 0)                                                                  \
+    X(nop, 1)                                                                  \
     X(set, 0)                                                                  \
     X(get, 0)                                                                  \
-    X(alloc, 0)                                                                \
-    X(free, 0)                                                                 \
-    X(store, 0)                                                                \
-    X(load, 0)                                                                 \
-    X(ptradd, 0)                                                               \
+    X(alloc, 1)                                                                \
+    X(free, 1)                                                                 \
+    X(store, 1)                                                                \
+    X(load, 1)                                                                 \
+    X(ptradd, 1)                                                               \
     X(speculate, 0)                                                            \
     X(commit, 0)                                                               \
     X(guard, 0)                                                                \
