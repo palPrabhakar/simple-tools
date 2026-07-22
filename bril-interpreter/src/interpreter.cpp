@@ -48,8 +48,6 @@ OPCODE_LIST
 
 typedef void (*Interpreter)(Context &, const sjp::Json &);
 
-#define TEST_LIST X(add, 0)
-
 const std::unordered_map<std::string, Interpreter> opcode_list = {
 #define X(op, bit) {#op, interpret_##op},
     OPCODE_LIST
@@ -84,7 +82,15 @@ const std::unordered_map<std::string, Interpreter> opcode_list = {
 
 constexpr auto &_iota = std::views::iota;
 
-void interpret_function(Context &ctx, std::string fn_name);
+void interpret_function(Context &ctx, std::string fn_name, Frame frame);
+
+#define IMPLEMENT_BINOP(name, op, in_type, out_type)                           \
+    void interpret_##name(Context &ctx, const sjp::Json &instr) {              \
+        _frame;                                                                \
+        set_dest(frame, instr,                                                 \
+                 (operation<op, in_type, out_type>(ctx, instr)));              \
+        _inc_ip;                                                               \
+    }
 
 Context create_context(const sjp::Json &program) {
     Context ctx;
@@ -148,7 +154,7 @@ std::vector<Value> get_main_args(Context &ctx, int argc, char **argv) {
     return v_args;
 }
 
-void setup_frame(Context &ctx, std::string fn_name, std::vector<Value> v_args) {
+Frame setup_frame(Context &ctx, std::string fn_name, std::vector<Value> v_args) {
     const auto func = ctx.functions.at(fn_name);
 
     Frame frame;
@@ -186,7 +192,7 @@ void setup_frame(Context &ctx, std::string fn_name, std::vector<Value> v_args) {
         }
     }
 
-    ctx.frames.push(frame);
+    return frame;
 }
 
 void find_label(Context &ctx, std::string lbl_name) {
@@ -212,11 +218,11 @@ void find_label(Context &ctx, std::string lbl_name) {
 
 void interpret_program(sjp::Json &program, int argc, char **argv) {
     auto ctx = create_context(program);
-    setup_frame(ctx, "main", get_main_args(ctx, argc, argv));
-    interpret_function(ctx, "main");
+    auto frame = setup_frame(ctx, "main", get_main_args(ctx, argc, argv));
+    interpret_function(ctx, "main", frame);
 }
 
-void interpret_function(Context &ctx, std::string fn_name) {
+void interpret_function(Context &ctx, std::string fn_name, Frame fn_frame) {
     if (!ctx.functions.contains(fn_name)) {
         throw std::runtime_error(
             std::format("{} function not found\n", fn_name));
@@ -225,6 +231,7 @@ void interpret_function(Context &ctx, std::string fn_name) {
     const auto func = ctx.functions.at(fn_name);
     const auto instrs = func.Get("instrs").value();
 
+    ctx.frames.push(fn_frame);
     auto &frame = ctx.frames.top();
 
     while (frame.ip < frame.end) {
@@ -253,13 +260,6 @@ Value get_json_value(const sjp::Json &instr) {
     }
 }
 
-void interpret_const(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    auto dest = get_dest(instr);
-    set_dest(frame, instr, get_json_value(instr));
-    _inc_ip;
-}
-
 template <template <typename> typename Op, typename T, typename R = T>
 R operation(Context &ctx, const sjp::Json &instr) {
     _frame;
@@ -268,116 +268,45 @@ R operation(Context &ctx, const sjp::Json &instr) {
               std::get<T>(get_arg_v(frame, instr, 1)));
 }
 
-void interpret_add(Context &ctx, const sjp::Json &instr) {
+void interpret_const(Context &ctx, const sjp::Json &instr) {
     _frame;
-    set_dest(frame, instr, (operation<std::plus, int>(ctx, instr)));
+    auto dest = get_dest(instr);
+    set_dest(frame, instr, get_json_value(instr));
     _inc_ip;
 }
 
-void interpret_sub(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::minus, int>(ctx, instr)));
-    _inc_ip;
-}
+// int
+IMPLEMENT_BINOP(add, std::plus, int, int)
+IMPLEMENT_BINOP(sub, std::minus, int, int)
+IMPLEMENT_BINOP(mul, std::multiplies, int, int)
+IMPLEMENT_BINOP(div, std::divides, int, int)
+IMPLEMENT_BINOP(eq, std::equal_to, int, bool)
+IMPLEMENT_BINOP(lt, std::less, int, bool)
+IMPLEMENT_BINOP(gt, std::greater, int, bool)
+IMPLEMENT_BINOP(le, std::less_equal, int, bool)
+IMPLEMENT_BINOP(ge, std::greater_equal, int, bool)
 
-void interpret_mul(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::multiplies, int>(ctx, instr)));
-    _inc_ip;
-}
+// float
+IMPLEMENT_BINOP(fadd, std::plus, float, float)
+IMPLEMENT_BINOP(fsub, std::minus, float, float)
+IMPLEMENT_BINOP(fmul, std::multiplies, float, float)
+IMPLEMENT_BINOP(fdiv, std::divides, float, float)
+IMPLEMENT_BINOP(feq, std::equal_to, float, bool)
+IMPLEMENT_BINOP(flt, std::less, float, bool)
+IMPLEMENT_BINOP(fgt, std::greater, float, bool)
+IMPLEMENT_BINOP(fle, std::less_equal, float, bool)
+IMPLEMENT_BINOP(fge, std::greater_equal, float, bool)
 
-void interpret_div(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::divides, int>(ctx, instr)));
-    _inc_ip;
-}
+// bool
+IMPLEMENT_BINOP(and, std::logical_and, bool, bool)
+IMPLEMENT_BINOP(or, std::logical_or, bool, bool)
 
-void interpret_eq(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::equal_to, int, bool>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_lt(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::less, int, bool>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_gt(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::greater, int, bool>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_le(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::less_equal, int, bool>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_ge(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr,
-             (operation<std::greater_equal, int, bool>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_fadd(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::plus, float>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_fsub(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::minus, float>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_fmul(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::multiplies, float>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_fdiv(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::divides, float>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_feq(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::equal_to, float, bool>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_flt(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::less, float, bool>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_fgt(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::greater, float, bool>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_fle(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr,
-             (operation<std::less_equal, float, bool>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_fge(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr,
-             (operation<std::greater_equal, float, bool>(ctx, instr)));
-    _inc_ip;
-}
+// char
+IMPLEMENT_BINOP(ceq, std::equal_to, char, bool)
+IMPLEMENT_BINOP(clt, std::less, char, bool)
+IMPLEMENT_BINOP(cgt, std::greater, char, bool)
+IMPLEMENT_BINOP(cle, std::less_equal, char, bool)
+IMPLEMENT_BINOP(cge, std::greater_equal, char, bool)
 
 void interpret_print(Context &ctx, const sjp::Json &instr) {
     _frame;
@@ -441,9 +370,10 @@ void interpret_call(Context &ctx, const sjp::Json &instr) {
     for (auto i : _iota(0u, args_size(instr))) {
         v_args.emplace_back(get_arg_v(frame, instr, i));
     }
+
     auto fn_name = instr.Get("funcs")->Get(0)->Get<std::string>().value();
-    setup_frame(ctx, fn_name, std::move(v_args));
-    interpret_function(ctx, fn_name);
+    auto new_frame = setup_frame(ctx, fn_name, std::move(v_args));
+    interpret_function(ctx, fn_name, new_frame);
 
     if (has_dest(instr)) {
         set_dest(frame, instr, ctx.ret_val);
@@ -455,50 +385,6 @@ void interpret_not(Context &ctx, const sjp::Json &instr) {
     _frame;
     auto value = std::get<bool>(get_arg_v(frame, instr, 0));
     set_dest(frame, instr, !value);
-    _inc_ip;
-}
-
-void interpret_and(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::logical_and, bool>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_or(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::logical_or, bool>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_ceq(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::equal_to, char, bool>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_clt(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr, (operation<std::less, char, bool>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_cle(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr,
-             (operation<std::less_equal, char, bool>(ctx, instr)));
-    _inc_ip;
-}
-void interpret_cgt(Context &ctx, const sjp::Json &instr) {
-
-    _frame;
-    set_dest(frame, instr, (operation<std::greater, char, bool>(ctx, instr)));
-    _inc_ip;
-}
-
-void interpret_cge(Context &ctx, const sjp::Json &instr) {
-    _frame;
-    set_dest(frame, instr,
-             (operation<std::greater_equal, char, bool>(ctx, instr)));
     _inc_ip;
 }
 
@@ -552,13 +438,11 @@ void interpret_store(Context &ctx, const sjp::Json &instr) {
     default:
         throw std::runtime_error("invalid type\n");
     }
-
     _inc_ip;
 }
 
 void interpret_load(Context &ctx, const sjp::Json &instr) {
     _frame;
-
     auto ptr = get_arg_v(frame, instr, 0);
     switch (get_type(instr)[0]) {
 #define X(t, v, i)                                                             \
@@ -568,16 +452,13 @@ void interpret_load(Context &ctx, const sjp::Json &instr) {
         TYPE_LIST
 #undef X
     }
-
     _inc_ip;
 }
 
 void interpret_ptradd(Context &ctx, const sjp::Json &instr) {
     _frame;
-
     auto val = std::get<int>(get_arg_v(frame, instr, 1));
     auto ptr = get_arg_v(frame, instr, 0);
-
     switch (get_ptr_type(instr)[0]) {
 #define X(t, v, i)                                                             \
     case v: {                                                                  \
@@ -588,7 +469,6 @@ void interpret_ptradd(Context &ctx, const sjp::Json &instr) {
         TYPE_LIST
 #undef X
     }
-
     _inc_ip;
 }
 
